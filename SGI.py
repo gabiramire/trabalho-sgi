@@ -7,6 +7,12 @@ POINT = "point"
 LINE = "line"
 WIREFRAME = "wireframe"  # polígono = wireframe
 
+options_label = {
+    POINT: "Ponto",
+    LINE: "Linha",
+    WIREFRAME: "Wireframe"
+}
+
 # =====================
 # Display File
 # =====================
@@ -79,8 +85,8 @@ class Viewport:
 # Sistema Gráfico
 # =====================
 class GraphicSystem:
-    def __init__(self, root):
-        self.canvas = tk.Canvas(root, width=600, height=600, bg='white')
+    def __init__(self, root, canvas_parent):
+        self.canvas = tk.Canvas(canvas_parent, width=600, height=600, bg='white')
         self.canvas.pack(fill=tk.BOTH, expand=True)
 
         self.display = DisplayFile()
@@ -127,6 +133,20 @@ class GraphicSystem:
                     x1, y1 = coords[i]
                     x2, y2 = coords[(i + 1) % len(coords)]
                     self.canvas.create_line(x1, y1, x2, y2)
+        
+        # Desenhar pontos temporários para linhas e wireframes em construção
+        if self.current_type in [WIREFRAME, LINE] and self.current_points:
+            p_coords = [self.viewport.world_to_viewport(x, y) for (x, y) in self.current_points]
+
+            for (px, py) in p_coords:
+                self.canvas.create_oval(px-3, py-3, px+3, py+3, outline="red", fill="red")
+
+            # Linhas de prévia entre os pontos já clicados para wireframes
+            if len(p_coords) >= 2 and self.current_type == WIREFRAME:
+                for i in range(len(p_coords) - 1):
+                    x1, y1 = p_coords[i]
+                    x2, y2 = p_coords[i + 1]
+                    self.canvas.create_line(x1, y1, x2, y2, dash=(3, 3))
 
     def on_click(self, event):
         # converter clique para coordenadas do mundo
@@ -148,16 +168,12 @@ class GraphicSystem:
         self.current_points.append((xw, yw))
 
         if self.current_type == POINT:
-            self.add_object("Ponto", POINT, self.current_points)
+            self.add_object(options_label[POINT], POINT, self.current_points)
             self.current_points = []
 
         elif self.current_type == LINE and len(self.current_points) == 2:
-            self.add_object("Linha", LINE, self.current_points)
+            self.add_object(options_label[LINE], LINE, self.current_points)
             self.current_points = []
-
-        elif self.current_type == WIREFRAME:
-            # vai acumulando até clicar no botão "Finalizar Wireframe"
-            pass
 
         self.redraw()
 
@@ -167,7 +183,7 @@ class GraphicSystem:
 
     def finalize_wireframe(self):
         if len(self.current_points) > 2:
-            self.add_object("Wireframe", WIREFRAME, self.current_points)
+            self.add_object(options_label[WIREFRAME], WIREFRAME, self.current_points)
         self.current_points = []
         self.redraw()
 
@@ -178,24 +194,69 @@ def main():
     root = tk.Tk()
     root.title("Computação Gráfica - Sistema Gráfico Interativo")
 
-    system = GraphicSystem(root)
+    # Menu lateral (Frame) com as opções
+    side_frame = tk.Frame(root, width=200)
+    side_frame.pack(side=tk.LEFT, padx=4, fill=tk.Y)
 
-    frame = tk.Frame(root)
-    frame.pack(side=tk.BOTTOM, fill=tk.X)
+    # Frame principal (Canvas)
+    main_frame = tk.Frame(root)
+    main_frame.pack(side=tk.RIGHT, expand=True, fill=tk.BOTH)
 
-    type_var = tk.StringVar()
-    type_menu = tk.OptionMenu(frame, type_var, POINT, LINE, WIREFRAME)
-    type_var.set(POINT)
-    type_menu.pack(side=tk.LEFT)
+    system = GraphicSystem(root, main_frame)
+
+    # Label do menu de opções
+    tk.Label(
+        side_frame, text="Menu de Opções", font=("Arial", 14, "bold")
+    ).pack(pady=10)
+
+    # Menu de seleção do tipo de objeto
+    type_var = tk.StringVar(value=options_label[POINT])
+    type_menu = tk.OptionMenu(side_frame, type_var, *options_label.values())
+    type_menu.pack(pady=5, fill=tk.X)
 
     def set_type(*args):
-        system.current_type = type_var.get()
+        label = type_var.get()
+        for key, val in options_label.items():
+            if val == label:
+                system.current_type = key
+                break
         system.current_points = []
 
     type_var.trace("w", set_type)
 
-    btn_poly = tk.Button(frame, text="Finalizar Polígono", command=system.finalize_wireframe)
-    btn_poly.pack(side=tk.LEFT)
+    # Botão para finalizar o wireframe
+    btn_poly = tk.Button(side_frame, text="Finalizar Wireframe", command=system.finalize_wireframe)
+    btn_poly.pack(pady=10, fill=tk.X)
+
+    # Sub-menu (LabelFrame) com opções de movimentação e zoom da window contido no menu lateral
+    window_frame = tk.LabelFrame(
+        side_frame, text="Window", font=("Arial", 11, "bold"), labelanchor="n", padx=5, pady=5
+    )
+    window_frame.pack(fill=tk.X, padx=10, pady=10)
+
+    nav_frame = tk.Frame(window_frame)
+    nav_frame.pack(pady=5)
+
+    btn_up = tk.Button(nav_frame, text="⭡", width=4, command=lambda: system.move(0, 10))
+    btn_up.grid(row=0, column=1, padx=2, pady=2)
+
+    btn_left = tk.Button(nav_frame, text="⭠", width=4, command=lambda: system.move(-10, 0))
+    btn_left.grid(row=1, column=0, padx=2, pady=2)
+
+    btn_right = tk.Button(nav_frame, text="⭢", width=4, command=lambda: system.move(10, 0))
+    btn_right.grid(row=1, column=2, padx=2, pady=2)
+
+    btn_down = tk.Button(nav_frame, text="⭣", width=4, command=lambda: system.move(0, -10))
+    btn_down.grid(row=2, column=1, padx=2, pady=2)
+
+    zoom_frame = tk.Frame(window_frame)
+    zoom_frame.pack(pady=10)
+
+    btn_zoom_in = tk.Button(zoom_frame, text="+", command=lambda: system.zoom(0.9))
+    btn_zoom_in.pack(side=tk.LEFT, padx=5)
+
+    btn_zoom_out = tk.Button(zoom_frame, text="-", command=lambda: system.zoom(1.1))
+    btn_zoom_out.pack(side=tk.LEFT, padx=5)
 
     root.mainloop()
 
