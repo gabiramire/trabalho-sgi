@@ -180,6 +180,12 @@ class GraphicSystem:
         # para integração com lista de objetos (será setado externamente)
         self.objects_listbox = None
 
+        # zoom com scroll do mouse
+        self.bind_mouse_scroll()
+
+        # movimentar mundo com o botão direito do mouse
+        self.bind_mouse_pan()
+
     def set_objects_listbox(self, listbox: tk.Listbox):
         self.objects_listbox = listbox
         self.refresh_listbox()
@@ -200,9 +206,39 @@ class GraphicSystem:
         self.window.pan(dx, dy)
         self.redraw()
 
+    def bind_mouse_pan(self):
+        self.canvas.bind("<ButtonPress-3>", self.on_right_button_press)
+        self.canvas.bind("<B3-Motion>", self.on_right_button_drag)
+
+    def on_right_button_press(self, event):
+        self.last_pan_x = event.x
+        self.last_pan_y = event.y
+
+    def on_right_button_drag(self, event):
+        dx = event.x - self.last_pan_x
+        dy = event.y - self.last_pan_y
+
+        self.last_pan_x = event.x
+        self.last_pan_y = event.y
+
+        self.move(-dx, dy)
+
     def zoom(self, factor):
         self.window.zoom(factor)
         self.redraw()
+
+    def bind_mouse_scroll(self):
+        # Windows e macOS
+        self.canvas.bind("<MouseWheel>", self.on_mouse_scroll)
+        # Linux
+        self.canvas.bind("<Button-4>", lambda e: self.zoom(0.9))
+        self.canvas.bind("<Button-5>", lambda e: self.zoom(1.1))
+
+    def on_mouse_scroll(self, event):
+        if event.delta > 0:
+            self.zoom(0.9)
+        else:
+            self.zoom(1.1)
 
     def update_coords_label(self, obj: Object2D = None):
         if not hasattr(self, "coords_label") or self.coords_label is None:
@@ -327,15 +363,30 @@ class GraphicSystem:
         if obj is None:
             messagebox.showinfo("Aviso", "Selecione um objeto na lista.")
             return
+
         sx = simpledialog.askfloat("Escalonamento", "sx:", parent=self.objects_listbox)
         if sx is None:
             return
-        sy = simpledialog.askfloat("Escalonamento", "sy (enter para usar sx):", parent=self.objects_listbox)
+
+        sy_str = simpledialog.askstring("Escalonamento", "sy (deixe vazio para usar sx):", parent=self.objects_listbox)
+        if sy_str is None:
+            return
+        elif sy_str.strip() == "":
+            sy = None
+        else:
+            try:
+                sy = float(sy_str)
+            except ValueError:
+                messagebox.showerror("Erro", "Valor inválido para sy.")
+                return
+        
         if sy is None:
             sy = sx
         # centro: por padrão centro do objeto (escalonamento "natural")
-        center_choice = messagebox.askquestion("Centro", "Usar centro do objeto como centro do escalonamento? (Sim = centro do objeto, Não = escolher ponto arbitrário)")
-        if center_choice == "yes":
+        center_choice = messagebox.askyesno(
+            "Centro", "Usar centro do objeto como centro do escalonamento?\n(Yes = centro do objeto, No = escolher ponto arbitrário)"
+        )
+        if center_choice:
             cx, cy = centroid(obj.coordinates)
         else:
             cx = simpledialog.askfloat("Centro arbitrário", "cx:", parent=self.objects_listbox)
@@ -350,6 +401,29 @@ class GraphicSystem:
         self.refresh_listbox()
         self.update_coords_label(obj)
 
+    def choose_rotation_center(self, parent):
+        result = {"choice": None}
+
+        popup = tk.Toplevel(parent)
+        popup.title("Centro de rotação")
+        popup.grab_set()
+
+        label = tk.Label(popup, text="Escolha o centro de rotação:")
+        label.pack(padx=10, pady=10)
+
+        def set_choice(choice):
+            result["choice"] = choice
+            popup.destroy()
+
+        btn_frame = tk.Frame(popup)
+        btn_frame.pack(pady=10)
+
+        tk.Button(btn_frame, text="Mundo", width=12, command=lambda: set_choice("mundo")).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Objeto", width=12, command=lambda: set_choice("objeto")).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Arbitrário", width=12, command=lambda: set_choice("arbitrario")).pack(side=tk.LEFT, padx=5)
+
+        popup.wait_window()
+        return result["choice"]
 
     def rotate_selected(self):
         obj = self.get_selected_object()
@@ -360,7 +434,7 @@ class GraphicSystem:
         if ang is None:
             return
         # escolher centro: mundo, objeto, arbitrário
-        choice = simpledialog.askstring("Centro de rotação", "Escolha 'mundo', 'objeto' ou 'arbitrario':", parent=self.objects_listbox)
+        choice = self.choose_rotation_center(self.objects_listbox)
         if choice is None:
             return
         choice = choice.strip().lower()
