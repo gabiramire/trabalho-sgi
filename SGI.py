@@ -1,6 +1,7 @@
 import tkinter as tk
+from tkinter import simpledialog, colorchooser, messagebox
 from typing import List, Tuple
-import ast
+import math
 
 # Tipos de objeto
 POINT = "point"
@@ -14,20 +15,24 @@ options_label = {
 }
 
 # =====================
-# Display File
+# Display File / Objetos
 # =====================
 class Object2D:
-    def __init__(self, name: str, obj_type: str, coordinates: List[Tuple[float, float]]):
+    def __init__(self, name: str, obj_type: str, coordinates: List[Tuple[float, float]], color: str = "#000000"):
         self.name = name
         self.obj_type = obj_type
-        self.coordinates = coordinates
+        self.coordinates = coordinates  # lista de tuples (x,y)
+        self.color = color  # cor de contorno (RGBf hex)
 
 class DisplayFile:
     def __init__(self):
-        self.objects = []
+        self.objects: List[Object2D] = []
 
     def add(self, obj: Object2D):
         self.objects.append(obj)
+
+    def remove(self, obj: Object2D):
+        self.objects.remove(obj)
 
 # =====================
 # Janela e Viewport
@@ -82,6 +87,67 @@ class Viewport:
         return px, py
 
 # =====================
+# Matrizes e transformações homogêneas (3x3)
+# =====================
+def mat_mult(A, B):
+    """Multiplica duas matrizes 3x3 A*B"""
+    return [
+        [sum(A[i][k] * B[k][j] for k in range(3)) for j in range(3)]
+        for i in range(3)
+    ]
+
+def apply_transform(matrix, obj: Object2D):
+    """Aplica matrix (3x3) a todas as coordenadas do objeto, alterando-o in-place."""
+    new_coords = []
+    for (x, y) in obj.coordinates:
+        vx = matrix[0][0]*x + matrix[0][1]*y + matrix[0][2]*1
+        vy = matrix[1][0]*x + matrix[1][1]*y + matrix[1][2]*1
+        vz = matrix[2][0]*x + matrix[2][1]*y + matrix[2][2]*1
+        if vz != 0:
+            new_coords.append((vx/vz, vy/vz))
+        else:
+            new_coords.append((vx, vy))
+    obj.coordinates = new_coords
+
+def make_translation(tx, ty):
+    return [
+        [1, 0, tx],
+        [0, 1, ty],
+        [0, 0, 1]
+    ]
+
+def make_scale(sx, sy, cx=0, cy=0):
+    # translate(-c) * scale * translate(c)
+    t1 = make_translation(-cx, -cy)
+    s = [
+        [sx, 0, 0],
+        [0, sy, 0],
+        [0, 0, 1]
+    ]
+    t2 = make_translation(cx, cy)
+    return mat_mult(t2, mat_mult(s, t1))
+
+def make_rotation(angle_deg, cx=0, cy=0):
+    a = math.radians(angle_deg)
+    cosA = math.cos(a)
+    sinA = math.sin(a)
+    r = [
+        [cosA, -sinA, 0],
+        [sinA, cosA, 0],
+        [0, 0, 1]
+    ]
+    t1 = make_translation(-cx, -cy)
+    t2 = make_translation(cx, cy)
+    return mat_mult(t2, mat_mult(r, t1))
+
+def centroid(coords: List[Tuple[float,float]]):
+    if not coords:
+        return 0.0, 0.0
+    xs = [p[0] for p in coords]
+    ys = [p[1] for p in coords]
+    return sum(xs)/len(xs), sum(ys)/len(ys)
+
+# =====================
 # Sistema Gráfico
 # =====================
 class GraphicSystem:
@@ -96,6 +162,7 @@ class GraphicSystem:
         self.current_points = []  # pontos coletados via clique
         self.current_type = POINT
         self.object_count = 0
+        self.default_color = "#000000"
 
         # redesenhar ao redimensionar
         self.canvas.bind("<Configure>", lambda e: self.redraw())
@@ -110,6 +177,25 @@ class GraphicSystem:
         root.bind("<plus>", lambda e: self.zoom(0.9))
         root.bind("<minus>", lambda e: self.zoom(1.1))
 
+        # para integração com lista de objetos (será setado externamente)
+        self.objects_listbox = None
+
+    def set_objects_listbox(self, listbox: tk.Listbox):
+        self.objects_listbox = listbox
+        self.refresh_listbox()
+        self.objects_listbox.bind("<<ListboxSelect>>", self.on_object_selected)
+
+    def on_object_selected(self, event):
+        obj = self.get_selected_object()
+        self.update_coords_label(obj)
+
+    def refresh_listbox(self):
+        if self.objects_listbox is None:
+            return
+        self.objects_listbox.delete(0, tk.END)
+        for obj in self.display.objects:
+            self.objects_listbox.insert(tk.END, obj.name)
+
     def move(self, dx, dy):
         self.window.pan(dx, dy)
         self.redraw()
@@ -118,22 +204,36 @@ class GraphicSystem:
         self.window.zoom(factor)
         self.redraw()
 
+    def update_coords_label(self, obj: Object2D = None):
+        if not hasattr(self, "coords_label") or self.coords_label is None:
+            return
+        if obj is None:
+            self.coords_label.config(text="(nenhum objeto selecionado)")
+            return
+        coords_str = " ".join([f"({x:.2f},{y:.2f})" for x, y in obj.coordinates])
+        self.coords_label.config(text=f"{obj.name}: {coords_str}")
+
+
     def redraw(self):
         self.canvas.delete("all")
         for obj in self.display.objects:
             coords = [self.viewport.world_to_viewport(x, y) for (x, y) in obj.coordinates]
 
             if obj.obj_type == POINT:
+                if not coords:
+                    continue
                 x, y = coords[0]
-                self.canvas.create_oval(x-2, y-2, x+2, y+2, fill="black")
+                self.canvas.create_oval(x-3, y-3, x+3, y+3, fill=obj.color, outline=obj.color)
             elif obj.obj_type == LINE:
-                self.canvas.create_line(coords[0], coords[1])
+                if len(coords) >= 2:
+                    self.canvas.create_line(coords[0], coords[1], fill=obj.color)
             elif obj.obj_type == WIREFRAME:
-                for i in range(len(coords)):
-                    x1, y1 = coords[i]
-                    x2, y2 = coords[(i + 1) % len(coords)]
-                    self.canvas.create_line(x1, y1, x2, y2)
-        
+                if len(coords) >= 2:
+                    for i in range(len(coords)):
+                        x1, y1 = coords[i]
+                        x2, y2 = coords[(i + 1) % len(coords)]
+                        self.canvas.create_line(x1, y1, x2, y2, fill=obj.color)
+
         # Desenhar pontos temporários para linhas e wireframes em construção
         if self.current_type in [WIREFRAME, LINE] and self.current_points:
             p_coords = [self.viewport.world_to_viewport(x, y) for (x, y) in self.current_points]
@@ -168,34 +268,158 @@ class GraphicSystem:
         self.current_points.append((xw, yw))
 
         if self.current_type == POINT:
-            self.add_object(options_label[POINT], POINT, self.current_points)
+            self.add_object(options_label[POINT], POINT, self.current_points, self.default_color)
             self.current_points = []
 
         elif self.current_type == LINE and len(self.current_points) == 2:
-            self.add_object(options_label[LINE], LINE, self.current_points)
+            self.add_object(options_label[LINE], LINE, self.current_points, self.default_color)
             self.current_points = []
 
         self.redraw()
 
-    def add_object(self, name, obj_type, coords):
+    def add_object(self, name, obj_type, coords, color="#000000"):
         self.object_count += 1
-        self.display.add(Object2D(f"{name}_{self.object_count}", obj_type, coords))
+        obj = Object2D(f"{name}_{self.object_count}", obj_type, coords.copy(), color=color)
+        self.display.add(obj)
+        self.refresh_listbox()
+        self.redraw()
 
     def finalize_wireframe(self):
         if len(self.current_points) > 2:
-            self.add_object(options_label[WIREFRAME], WIREFRAME, self.current_points)
+            self.add_object(options_label[WIREFRAME], WIREFRAME, self.current_points, color=self.default_color)
         self.current_points = []
         self.redraw()
+
+    # =====================
+    # Operações sobre objeto selecionado
+    # =====================
+    def get_selected_object(self):
+        if self.objects_listbox is None:
+            return None
+        sel = self.objects_listbox.curselection()
+        if not sel:
+            return None
+        idx = sel[0]
+        if idx < 0 or idx >= len(self.display.objects):
+            return None
+        return self.display.objects[idx]
+
+    def translate_selected(self):
+        obj = self.get_selected_object()
+        if obj is None:
+            messagebox.showinfo("Aviso", "Selecione um objeto na lista.")
+            return
+        tx = simpledialog.askfloat("Translação", "tx:", parent=self.objects_listbox)
+        if tx is None:
+            return
+        ty = simpledialog.askfloat("Translação", "ty:", parent=self.objects_listbox)
+        if ty is None:
+            return
+        M = make_translation(tx, ty)
+        apply_transform(M, obj)
+        self.redraw()
+        self.refresh_listbox()
+        self.update_coords_label(obj)
+
+
+    def scale_selected(self):
+        obj = self.get_selected_object()
+        if obj is None:
+            messagebox.showinfo("Aviso", "Selecione um objeto na lista.")
+            return
+        sx = simpledialog.askfloat("Escalonamento", "sx:", parent=self.objects_listbox)
+        if sx is None:
+            return
+        sy = simpledialog.askfloat("Escalonamento", "sy (enter para usar sx):", parent=self.objects_listbox)
+        if sy is None:
+            sy = sx
+        # centro: por padrão centro do objeto (escalonamento "natural")
+        center_choice = messagebox.askquestion("Centro", "Usar centro do objeto como centro do escalonamento? (Sim = centro do objeto, Não = escolher ponto arbitrário)")
+        if center_choice == "yes":
+            cx, cy = centroid(obj.coordinates)
+        else:
+            cx = simpledialog.askfloat("Centro arbitrário", "cx:", parent=self.objects_listbox)
+            if cx is None:
+                return
+            cy = simpledialog.askfloat("Centro arbitrário", "cy:", parent=self.objects_listbox)
+            if cy is None:
+                return
+        M = make_scale(sx, sy, cx, cy)
+        apply_transform(M, obj)
+        self.redraw()
+        self.refresh_listbox()
+        self.update_coords_label(obj)
+
+
+    def rotate_selected(self):
+        obj = self.get_selected_object()
+        if obj is None:
+            messagebox.showinfo("Aviso", "Selecione um objeto na lista.")
+            return
+        ang = simpledialog.askfloat("Rotação", "Ângulo em graus (positivo: anti-horário):", parent=self.objects_listbox)
+        if ang is None:
+            return
+        # escolher centro: mundo, objeto, arbitrário
+        choice = simpledialog.askstring("Centro de rotação", "Escolha 'mundo', 'objeto' ou 'arbitrario':", parent=self.objects_listbox)
+        if choice is None:
+            return
+        choice = choice.strip().lower()
+        if choice == "mundo":
+            cx, cy = 0.0, 0.0
+        elif choice == "objeto":
+            cx, cy = centroid(obj.coordinates)
+        elif choice == "arbitrario":
+            cx = simpledialog.askfloat("Centro arbitrário", "cx:", parent=self.objects_listbox)
+            if cx is None:
+                return
+            cy = simpledialog.askfloat("Centro arbitrário", "cy:", parent=self.objects_listbox)
+            if cy is None:
+                return
+        else:
+            messagebox.showerror("Erro", "Opção inválida. Use 'mundo', 'objeto' ou 'arbitrario'.")
+            return
+        M = make_rotation(ang, cx, cy)
+        apply_transform(M, obj)
+        self.redraw()
+        self.refresh_listbox()
+        self.update_coords_label(obj)
+
+    def set_default_color(self):
+        c = colorchooser.askcolor(title="Escolher cor padrão")[1]
+        if c:
+            self.default_color = c
+
+    def change_selected_color(self):
+        obj = self.get_selected_object()
+        if obj is None:
+            messagebox.showinfo("Aviso", "Selecione um objeto na lista.")
+            return
+        c = colorchooser.askcolor(title=f"Cor para {obj.name}")[1]
+        if c:
+            obj.color = c
+            self.redraw()
+
+    def delete_selected(self):
+        obj = self.get_selected_object()
+        if obj is None:
+            messagebox.showinfo("Aviso", "Selecione um objeto na lista.")
+            return
+        confirm = messagebox.askyesno("Confirmar", f"Remover {obj.name}?")
+        if confirm:
+            self.display.remove(obj)
+            self.refresh_listbox()
+            self.redraw()
+
 
 # =====================
 # Interface
 # =====================
 def main():
     root = tk.Tk()
-    root.title("Computação Gráfica - Sistema Gráfico Interativo")
+    root.title("Computação Gráfica - Sistema Gráfico Interativo (Transformações 2D)")
 
     # Menu lateral (Frame) com as opções
-    side_frame = tk.Frame(root, width=200)
+    side_frame = tk.Frame(root, width=250)
     side_frame.pack(side=tk.LEFT, padx=4, fill=tk.Y)
 
     # Frame principal (Canvas)
@@ -207,12 +431,12 @@ def main():
     # Label do menu de opções
     tk.Label(
         side_frame, text="Menu de Opções", font=("Arial", 14, "bold")
-    ).pack(pady=10)
+    ).pack(pady=6)
 
     # Menu de seleção do tipo de objeto
     type_var = tk.StringVar(value=options_label[POINT])
     type_menu = tk.OptionMenu(side_frame, type_var, *options_label.values())
-    type_menu.pack(pady=5, fill=tk.X)
+    type_menu.pack(pady=3, fill=tk.X)
 
     def set_type(*args):
         label = type_var.get()
@@ -226,27 +450,69 @@ def main():
 
     # Botão para finalizar o wireframe
     btn_poly = tk.Button(side_frame, text="Finalizar Wireframe", command=system.finalize_wireframe)
-    btn_poly.pack(pady=10, fill=tk.X)
+    btn_poly.pack(pady=6, fill=tk.X)
+
+    # Cor padrão para novos objetos
+    color_frame = tk.Frame(side_frame)
+    color_frame.pack(pady=6, fill=tk.X, padx=5)
+    tk.Label(color_frame, text="Cor padrão (contorno):").pack(side=tk.LEFT)
+    btn_color = tk.Button(color_frame, text="Escolher", command=system.set_default_color)
+    btn_color.pack(side=tk.RIGHT)
+
+    # Lista de objetos
+    tk.Label(side_frame, text="Objetos:", font=("Arial", 11, "bold")).pack(pady=(10,0))
+    listbox = tk.Listbox(side_frame, width=28, height=12)
+    listbox.pack(padx=5, pady=4)
+    system.set_objects_listbox(listbox)
+
+    # Botões de transformação
+    tf_frame = tk.LabelFrame(side_frame, text="Transformações", padx=5, pady=5)
+    tf_frame.pack(fill=tk.X, padx=5, pady=6)
+
+    btn_translate = tk.Button(tf_frame, text="Transladar", command=system.translate_selected)
+    btn_translate.pack(fill=tk.X, pady=2)
+
+    btn_scale = tk.Button(tf_frame, text="Escalonar", command=system.scale_selected)
+    btn_scale.pack(fill=tk.X, pady=2)
+
+    btn_rotate = tk.Button(tf_frame, text="Rotacionar", command=system.rotate_selected)
+    btn_rotate.pack(fill=tk.X, pady=2)
+
+    btn_change_color = tk.Button(tf_frame, text="Mudar cor do objeto", command=system.change_selected_color)
+    btn_change_color.pack(fill=tk.X, pady=2)
+
+    btn_delete = tk.Button(tf_frame, text="Excluir objeto", command=system.delete_selected)
+    btn_delete.pack(fill=tk.X, pady=2)
+
+    # Frame inferior direito para exibir coordenadas
+    coords_frame = tk.Frame(main_frame)
+    coords_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=5)
+
+    tk.Label(coords_frame, text="Coordenadas do objeto selecionado:").pack(anchor="w", padx=5)
+    coords_label = tk.Label(coords_frame, text="(nenhum objeto selecionado)", anchor="w", justify="left")
+    coords_label.pack(anchor="w", padx=5)
+    system.coords_label = coords_label
+
 
     # Sub-menu (LabelFrame) com opções de movimentação e zoom da window contido no menu lateral
     window_frame = tk.LabelFrame(
         side_frame, text="Window", font=("Arial", 11, "bold"), labelanchor="n", padx=5, pady=5
     )
-    window_frame.pack(fill=tk.X, padx=10, pady=10)
+    window_frame.pack(fill=tk.X, padx=10, pady=8)
 
     nav_frame = tk.Frame(window_frame)
     nav_frame.pack(pady=5)
 
-    btn_up = tk.Button(nav_frame, text="⭡", width=4, command=lambda: system.move(0, 10))
+    btn_up = tk.Button(nav_frame, text="▲", width=4, command=lambda: system.move(0, 10))
     btn_up.grid(row=0, column=1, padx=2, pady=2)
 
-    btn_left = tk.Button(nav_frame, text="⭠", width=4, command=lambda: system.move(-10, 0))
+    btn_left = tk.Button(nav_frame, text="◀", width=4, command=lambda: system.move(-10, 0))
     btn_left.grid(row=1, column=0, padx=2, pady=2)
 
-    btn_right = tk.Button(nav_frame, text="⭢", width=4, command=lambda: system.move(10, 0))
+    btn_right = tk.Button(nav_frame, text="▶", width=4, command=lambda: system.move(10, 0))
     btn_right.grid(row=1, column=2, padx=2, pady=2)
 
-    btn_down = tk.Button(nav_frame, text="⭣", width=4, command=lambda: system.move(0, -10))
+    btn_down = tk.Button(nav_frame, text="▼", width=4, command=lambda: system.move(0, -10))
     btn_down.grid(row=2, column=1, padx=2, pady=2)
 
     zoom_frame = tk.Frame(window_frame)
@@ -257,6 +523,10 @@ def main():
 
     btn_zoom_out = tk.Button(zoom_frame, text="-", command=lambda: system.zoom(1.1))
     btn_zoom_out.pack(side=tk.LEFT, padx=5)
+
+    # Atalhos úteis
+    help_label = tk.Label(side_frame, text="Uso rápido:\n- Clique para criar pontos/linhas\n- Finalizar wireframe para polígonos\n- Selecione objeto na lista para transformar", wraplength=200, justify="left")
+    help_label.pack(padx=5, pady=10)
 
     root.mainloop()
 
