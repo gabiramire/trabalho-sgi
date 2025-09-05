@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import simpledialog, colorchooser, messagebox
+from tkinter import simpledialog, colorchooser, messagebox, filedialog
 from typing import List, Tuple
 import math
 
@@ -166,7 +166,7 @@ def centroid(coords: List[Tuple[float,float]]):
 # =====================
 class GraphicSystem:
     def __init__(self, root, canvas_parent):
-        self.canvas = tk.Canvas(canvas_parent, width=600, height=600, bg='white')
+        self.canvas = tk.Canvas(canvas_parent, width=800, height=600, bg='white')
         self.canvas.pack(fill=tk.BOTH, expand=True)
 
         self.display = DisplayFile()
@@ -508,17 +508,181 @@ class GraphicSystem:
             self.refresh_listbox()
             self.redraw()
 
+    def save_as_obj(self, filename=None):
+        if filename is None:
+            filename = filedialog.asksaveasfilename(
+                defaultextension=".obj",
+                filetypes=[("Wavefront OBJ", "*.obj")],
+                title="Salvar mundo como .obj"
+            )
+            if not filename:
+                return
+
+        lines = []
+        offset = 1
+        for obj in self.display.objects:
+            obj_lines, offset = DescritorOBJ.export_object(obj, offset)
+            lines.extend(obj_lines)
+
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+
+
+    def load_from_obj(self, filename=None):
+        if filename is None:
+            filename = filedialog.askopenfilename(
+                defaultextension=".obj",
+                filetypes=[("Wavefront OBJ", "*.obj")],
+                title="Abrir mundo .obj"
+            )
+            if not filename:
+                return
+
+        with open(filename, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        objects = DescritorOBJ.import_objects(lines)
+
+        for obj in objects:
+            self.display.add(obj)
+
+        self.refresh_listbox()
+        self.redraw()
+
+
+class DescritorOBJ:
+    @staticmethod
+    def export_object(obj, index_offset=1):
+        lines = []
+        lines.append(f"o {obj.name}")
+
+        # exportar vértices
+        for (x, y) in obj.coordinates:
+            lines.append(f"v {x:.6f} {y:.6f}")
+
+        # exportar arestas de acordo com tipo
+        if obj.obj_type == POINT:
+            lines.append(f"p {index_offset}")
+            next_offset = index_offset + 1
+
+        elif obj.obj_type == LINE:
+            v1 = index_offset
+            v2 = index_offset + 1
+            lines.append(f"l {v1} {v2}")
+            next_offset = index_offset + 2
+
+        elif obj.obj_type == WIREFRAME:
+            indices = [str(i) for i in range(index_offset, index_offset + len(obj.coordinates))]
+            indices.append(str(index_offset))
+            lines.append("l " + " ".join(indices))
+            next_offset = index_offset + len(obj.coordinates)
+
+        else:
+            next_offset = index_offset
+
+        return lines, next_offset
+
+    @staticmethod
+    def import_objects(lines):
+        objects = []
+        vertices = []
+        current_name = None
+        current_indices = []
+
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+
+            if line.startswith("o "):
+                if current_name and current_indices:
+                    coords = [vertices[i - 1] for i in current_indices]
+                    obj_type = DescritorOBJ._infer_type(current_indices)
+                    objects.append(Object2D(current_name, obj_type, coords))
+                    current_indices = []
+                current_name = line[2:].strip()
+
+            elif line.startswith("v "):
+                parts = line.split()
+                x, y = float(parts[1]), float(parts[2])
+                vertices.append((x, y))
+
+            elif line.startswith("p "):
+                parts = line.split()[1:]
+                current_indices = [int(p) for p in parts]
+                if current_name:
+                    coords = [vertices[i - 1] for i in current_indices]
+                    objects.append(Object2D(current_name, POINT, coords))
+                current_indices = []
+
+            elif line.startswith("l "):
+                parts = line.split()[1:]
+                current_indices = [int(p) for p in parts]
+                if current_name:
+                    coords = [vertices[i - 1] for i in current_indices]
+                    obj_type = DescritorOBJ._infer_type(current_indices)
+                    objects.append(Object2D(current_name, obj_type, coords))
+                current_indices = []
+
+        # salvar último se sobrou
+        if current_name and current_indices:
+            coords = [vertices[i - 1] for i in current_indices]
+            obj_type = DescritorOBJ._infer_type(current_indices)
+            objects.append(Object2D(current_name, obj_type, coords))
+
+        return objects
+    
+    @staticmethod
+    def _infer_type(indices): # definir o tipo de objeto (ponto, linha, wireframe)
+        if len(indices) == 1:
+            return POINT
+        elif len(indices) == 2:
+            return LINE
+        else:
+            return WIREFRAME
+
 
 # =====================
 # Interface
 # =====================
+def create_side_menu(root):
+    # Menu lateral (Frame) com as opções
+    side_frame = tk.Frame(root)
+    side_frame.pack(side=tk.LEFT, fill=tk.Y)
+
+    # Canvas para permitir o scroll
+    canvas = tk.Canvas(side_frame, width=240)
+    canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=5, padx=5)
+
+    # Scrollbar vertical
+    scrollbar = tk.Scrollbar(side_frame, orient="vertical", command=canvas.yview)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+    # Configurar o canvas para usar a scrollbar
+    canvas.configure(yscrollcommand=scrollbar.set)
+    canvas.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+    # Frame interno (onde ficam os botões e menus de verdade)
+    menu_frame = tk.Frame(canvas)
+    canvas.create_window((0, 0), window=menu_frame, anchor="nw")
+
+    def _on_mousewheel(event):
+        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def _on_mousewheel_linux(event, direction):
+        canvas.yview_scroll(direction, "units")
+
+    canvas.bind_all("<MouseWheel>", _on_mousewheel) 
+    canvas.bind_all("<Button-4>", lambda e: _on_mousewheel_linux(e, -1))
+    canvas.bind_all("<Button-5>", lambda e: _on_mousewheel_linux(e, 1))
+
+    return menu_frame
+
 def main():
     root = tk.Tk()
     root.title("Computação Gráfica - Sistema Gráfico Interativo (Transformações 2D)")
 
-    # Menu lateral (Frame) com as opções
-    side_frame = tk.Frame(root, width=250)
-    side_frame.pack(side=tk.LEFT, padx=4, fill=tk.Y)
+    menu_frame = create_side_menu(root)
 
     # Frame principal (Canvas)
     main_frame = tk.Frame(root)
@@ -526,14 +690,24 @@ def main():
 
     system = GraphicSystem(root, main_frame)
 
+    menubar = tk.Menu(root)
+    root.config(menu=menubar)
+
+    file_menu = tk.Menu(menubar, tearoff=0)
+    menubar.add_cascade(label="Arquivo", menu=file_menu)
+
+    file_menu.add_command(label="Abrir .obj", command=system.load_from_obj)
+    file_menu.add_command(label="Salvar como .obj", command=system.save_as_obj)
+    file_menu.add_command(label="Sair", command=root.quit)
+
     # Label do menu de opções
     tk.Label(
-        side_frame, text="Menu de Opções", font=("Arial", 14, "bold")
+        menu_frame, text="Menu de Opções", font=("Arial", 14, "bold")
     ).pack(pady=6)
 
     # Menu de seleção do tipo de objeto
     type_var = tk.StringVar(value=options_label[POINT])
-    type_menu = tk.OptionMenu(side_frame, type_var, *options_label.values())
+    type_menu = tk.OptionMenu(menu_frame, type_var, *options_label.values())
     type_menu.pack(pady=3, fill=tk.X)
 
     def set_type(*args):
@@ -547,24 +721,24 @@ def main():
     type_var.trace("w", set_type)
 
     # Botão para finalizar o wireframe
-    btn_poly = tk.Button(side_frame, text="Finalizar Wireframe", command=system.finalize_wireframe)
+    btn_poly = tk.Button(menu_frame, text="Finalizar Wireframe", command=system.finalize_wireframe)
     btn_poly.pack(pady=6, fill=tk.X)
 
     # Cor padrão para novos objetos
-    color_frame = tk.Frame(side_frame)
+    color_frame = tk.Frame(menu_frame)
     color_frame.pack(pady=6, fill=tk.X, padx=5)
     tk.Label(color_frame, text="Cor padrão (contorno):").pack(side=tk.LEFT)
     btn_color = tk.Button(color_frame, text="Escolher", command=system.set_default_color)
     btn_color.pack(side=tk.RIGHT)
 
     # Lista de objetos
-    tk.Label(side_frame, text="Objetos:", font=("Arial", 11, "bold")).pack(pady=(10,0))
-    listbox = tk.Listbox(side_frame, width=28, height=12)
+    tk.Label(menu_frame, text="Objetos:", font=("Arial", 11, "bold")).pack(pady=(10,0))
+    listbox = tk.Listbox(menu_frame, width=28, height=12)
     listbox.pack(padx=5, pady=4)
     system.set_objects_listbox(listbox)
 
     # Botões de transformação
-    tf_frame = tk.LabelFrame(side_frame, text="Transformações", padx=5, pady=5)
+    tf_frame = tk.LabelFrame(menu_frame, text="Transformações", padx=5, pady=5)
     tf_frame.pack(fill=tk.X, padx=5, pady=6)
 
     btn_translate = tk.Button(tf_frame, text="Transladar", command=system.translate_selected)
@@ -594,7 +768,7 @@ def main():
 
     # Sub-menu (LabelFrame) com opções de movimentação e zoom da window contido no menu lateral
     window_frame = tk.LabelFrame(
-        side_frame, text="Window", font=("Arial", 11, "bold"), labelanchor="n", padx=5, pady=5
+        menu_frame, text="Window", font=("Arial", 11, "bold"), labelanchor="n", padx=5, pady=5
     )
     window_frame.pack(fill=tk.X, padx=10, pady=8)
 
@@ -632,7 +806,7 @@ def main():
     btn_rotate_right.pack(side=tk.LEFT, padx=2)
 
     # Atalhos úteis
-    help_label = tk.Label(side_frame, text="Uso rápido:\n- Clique para criar pontos/linhas\n- Finalizar wireframe para polígonos\n- Selecione objeto na lista para transformar", wraplength=200, justify="left")
+    help_label = tk.Label(menu_frame, text="Uso rápido:\n- Clique para criar pontos/linhas\n- Finalizar wireframe para polígonos\n- Selecione objeto na lista para transformar", wraplength=200, justify="left")
     help_label.pack(padx=5, pady=10)
 
     root.mainloop()
