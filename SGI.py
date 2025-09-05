@@ -43,6 +43,7 @@ class Window:
         self.x_max = x_max
         self.y_min = y_min
         self.y_max = y_max
+        self.rotation_angle = 0.0
 
     def width(self):
         return self.x_max - self.x_min
@@ -64,6 +65,9 @@ class Window:
         self.y_min += dy
         self.y_max += dy
 
+    def rotate(self, angle_deg):
+        self.rotation_angle = (self.rotation_angle + angle_deg) % 360
+
 class Viewport:
     def __init__(self, canvas: tk.Canvas, window: Window):
         self.canvas = canvas
@@ -72,6 +76,16 @@ class Viewport:
     def world_to_viewport(self, x, y):
         vx = self.canvas.winfo_width()
         vy = self.canvas.winfo_height()
+
+        cx = (self.window.x_min + self.window.x_max) / 2
+        cy = (self.window.y_min + self.window.y_max) / 2
+        ang = math.radians(self.window.rotation_angle)
+        cosA, sinA = math.cos(ang), math.sin(ang)
+
+        x_rel, y_rel = x - cx, y - cy
+        x_rot = x_rel * cosA - y_rel * sinA
+        y_rot = x_rel * sinA + y_rel * cosA
+        x, y = x_rot + cx, y_rot + cy
 
         wx, wy = self.window.width(), self.window.height()
         sx = vx / wx
@@ -300,6 +314,16 @@ class GraphicSystem:
 
         xw = (vx - offset_x) / s + self.window.x_min
         yw = self.window.y_max - (vy - offset_y) / s
+
+        cx = (self.window.x_min + self.window.x_max) / 2
+        cy = (self.window.y_min + self.window.y_max) / 2
+        ang = math.radians(self.window.rotation_angle)
+        cosA, sinA = math.cos(ang), math.sin(ang)
+
+        x_rel, y_rel = xw - cx, yw - cy
+        x_rot = x_rel * cosA + y_rel * sinA
+        y_rot = -x_rel * sinA + y_rel * cosA
+        xw, yw = x_rot + cx, y_rot + cy
 
         self.current_points.append((xw, yw))
 
@@ -597,6 +621,15 @@ def main():
 
     btn_zoom_out = tk.Button(zoom_frame, text="-", command=lambda: system.zoom(1.1))
     btn_zoom_out.pack(side=tk.LEFT, padx=5)
+
+    rotate_frame = tk.Frame(window_frame)
+    rotate_frame.pack(pady=5, fill=tk.X)
+
+    tk.Label(rotate_frame, text="Rotação (5°):").pack(side=tk.LEFT)
+    btn_rotate_left = tk.Button(rotate_frame, text="⟲", command=lambda: (system.window.rotate(5), system.redraw()))
+    btn_rotate_left.pack(side=tk.LEFT, padx=2)
+    btn_rotate_right = tk.Button(rotate_frame, text="⟳", command=lambda: (system.window.rotate(-5), system.redraw()))
+    btn_rotate_right.pack(side=tk.LEFT, padx=2)
 
     # Atalhos úteis
     help_label = tk.Label(side_frame, text="Uso rápido:\n- Clique para criar pontos/linhas\n- Finalizar wireframe para polígonos\n- Selecione objeto na lista para transformar", wraplength=200, justify="left")
