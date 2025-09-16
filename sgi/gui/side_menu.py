@@ -6,6 +6,37 @@ def create_side_menu(root, main_frame, system):
     side_frame = tk.Frame(root)
     side_frame.pack(side=tk.LEFT, fill=tk.Y)
 
+    side_frame = tk.Frame(root)
+    side_frame.pack(side=tk.LEFT, fill=tk.Y)
+
+    # Seleção do algoritmo de clipping
+    tk.Label(side_frame, text="Clipping de Retas:").pack()
+
+    tk.Radiobutton(
+        side_frame,
+        text="Cohen-Sutherland",
+        variable=system.clip_var,
+        value="CS",
+        command=lambda: system.set_clipping_mode(system.clip_var.get())
+    ).pack(anchor='w')
+
+    tk.Radiobutton(
+        side_frame,
+        text="Liang-Barsky",
+        variable=system.clip_var,
+        value="LB",
+        command=lambda: system.set_clipping_mode(system.clip_var.get())
+    ).pack(anchor='w')
+
+    # Lógica de preenchimento de polígonos
+    fill_var = tk.BooleanVar(value=False)
+    tk.Label(side_frame, text="Polígono preenchido:").pack()
+    tk.Checkbutton(
+        side_frame,
+        text="Preencher",
+        variable=system.fill_var  # <- usa a BooleanVar do GraphicSystem
+    ).pack(anchor='w')
+
     # Canvas para permitir o scroll
     canvas = tk.Canvas(side_frame, width=240)
     canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=5, padx=5)
@@ -82,7 +113,7 @@ def create_default_color(menu_frame, system):
     # Cor padrão para novos objetos
     color_frame = tk.Frame(menu_frame)
     color_frame.pack(pady=6, fill=tk.X, padx=5)
-    tk.Label(color_frame, text="Cor padrão (contorno):").pack(side=tk.LEFT)
+    tk.Label(color_frame, text="Cor padrão do objeto:").pack(side=tk.LEFT)
     btn_color = tk.Button(color_frame, text="Escolher", command=system.set_default_color)
     btn_color.pack(side=tk.RIGHT)
 

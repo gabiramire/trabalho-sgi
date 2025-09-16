@@ -5,6 +5,7 @@ from tkinter import simpledialog, colorchooser, messagebox, filedialog
 from .objects import Object2D, DisplayFile, POINT, LINE, WIREFRAME, options_label
 from .transform import apply_transform, make_translation, make_scale, make_rotation, centroid
 from .obj_descriptor import DescritorOBJ
+from .clipping import cohen_sutherland, liang_barsky, sutherland_hodgman
 
 class Window:
     def __init__(self, x_min=-100, x_max=100, y_min=-100, y_max=100):
@@ -41,33 +42,95 @@ class Viewport:
     def __init__(self, canvas: tk.Canvas, window: Window):
         self.canvas = canvas
         self.window = window
-    
-    def world_to_viewport(self, x, y):
-        vx = self.canvas.winfo_width()
-        vy = self.canvas.winfo_height()
+        # retângulo fixo da viewport (margens): (10,10) até (largura-40, altura-30)
+        self.px0 = 10
+        self.py0 = 10
+        self.px1 = 0   # será calculado
+        self.py1 = 0   # será calculado
 
+    def update_rect(self):
+        w = max(self.canvas.winfo_width(), 1)
+        h = max(self.canvas.winfo_height(), 1)
+
+        # retângulo FIXO da viewport (margens em px)
+        self.px1 = max(w - 40, self.px0 + 1)
+        self.py1 = max(h - 30, self.py0 + 1)
+
+        # >>> CASAR ASPECTO DA WINDOW COM A VIEWPORT INTERNA <<<
+        vx = max(self.px1 - self.px0, 1)
+        vy = max(self.py1 - self.py0, 1)
+        target_aspect = vx / vy
+
+        wx = self.window.width()
+        wy = self.window.height()
+        if wx <= 0 or wy <= 0:
+            return
+
+        win_aspect = wx / wy
+        cx = (self.window.x_min + self.window.x_max) / 2.0
+        cy = (self.window.y_min + self.window.y_max) / 2.0
+
+        if abs(win_aspect - target_aspect) < 1e-9:
+            return  # já está ok
+
+        if win_aspect > target_aspect:
+            # window está "mais larga" do que a viewport -> aumentar altura (wy)
+            new_wy = wx / target_aspect
+            dh = (new_wy - wy) / 2.0
+            self.window.y_min = cy - (wy / 2.0) - dh
+            self.window.y_max = cy + (wy / 2.0) + dh
+        else:
+            # window está "mais alta" -> aumentar largura (wx)
+            new_wx = wy * target_aspect
+            dw = (new_wx - wx) / 2.0
+            self.window.x_min = cx - (wx / 2.0) - dw
+            self.window.x_max = cx + (wx / 2.0) + dw
+
+    def _scale_and_offsets(self):
+        vx = max(self.px1 - self.px0, 1)
+        vy = max(self.py1 - self.py0, 1)
+        wx = self.window.width()
+        wy = self.window.height()
+        sx = vx / wx
+        sy = vy / wy
+        s = min(sx, sy)
+        offset_x = self.px0 + (vx - s * wx) / 2
+        offset_y = self.py0 + (vy - s * wy) / 2
+        return s, offset_x, offset_y
+
+    def world_to_viewport(self, x, y):
+        # aplica rotação da janela (como você já fazia)
         cx = (self.window.x_min + self.window.x_max) / 2
         cy = (self.window.y_min + self.window.y_max) / 2
         ang = math.radians(self.window.rotation_angle)
         cosA, sinA = math.cos(ang), math.sin(ang)
-
         x_rel, y_rel = x - cx, y - cy
-        x_rot = x_rel * cosA - y_rel * sinA
-        y_rot = x_rel * sinA + y_rel * cosA
-        x, y = x_rot + cx, y_rot + cy
+        xw = x_rel * cosA - y_rel * sinA + cx
+        yw = x_rel * sinA + y_rel * cosA + cy
 
-        wx, wy = self.window.width(), self.window.height()
-        sx = vx / wx
-        sy = vy / wy
-        s = min(sx, sy)  # manter proporção
-
-        offset_x = (vx - s * wx) / 2
-        offset_y = (vy - s * wy) / 2
-
-        px = (x - self.window.x_min) * s + offset_x
-        py = (self.window.y_max - y) * s + offset_y
-
+        s, ox, oy = self._scale_and_offsets()
+        px = (xw - self.window.x_min) * s + ox
+        py = (self.window.y_max - yw) * s + oy
         return px, py
+
+    def viewport_to_world(self, px, py):
+        s, ox, oy = self._scale_and_offsets()
+        xw = (px - ox) / s + self.window.x_min
+        yw = self.window.y_max - (py - oy) / s
+
+        # desfaz a rotação
+        cx = (self.window.x_min + self.window.x_max) / 2
+        cy = (self.window.y_min + self.window.y_max) / 2
+        ang = -math.radians(self.window.rotation_angle)
+        cosA, sinA = math.cos(ang), math.sin(ang)
+        x_rel, y_rel = xw - cx, yw - cy
+        x = x_rel * cosA - y_rel * sinA + cx
+        y = x_rel * sinA + y_rel * cosA + cy
+        return x, y
+
+    # linha para visualizar o clipping
+    def draw_frame(self, color="red"):
+        self.canvas.create_rectangle(self.px0, self.py0, self.px1, self.py1, outline=color, width=2)
 
 
 class GraphicSystem:
@@ -78,14 +141,23 @@ class GraphicSystem:
         self.display = DisplayFile()
         self.window = Window()
         self.viewport = Viewport(self.canvas, self.window)
+        self.canvas.update_idletasks()  # mede o tamanho real do canvas
+        self.viewport.update_rect()     # calcula (px0,py0)-(px1,py1)
+        self.canvas.after(0, lambda: (self.viewport.update_rect(), self.redraw()))
 
         self.current_points = []  # pontos coletados via clique
         self.current_type = POINT
         self.object_count = 0
         self.default_color = "#000000"
 
+        self.clipping_mode = "CS"  # ou "LB" 
+
+        # variáveis para UI
+        self.clip_var = tk.StringVar(value="CS")
+        self.fill_var = tk.BooleanVar(value=False)
+
         # redesenhar ao redimensionar
-        self.canvas.bind("<Configure>", lambda e: self.redraw())
+        self.canvas.bind("<Configure>", lambda e: (self.viewport.update_rect(), self.redraw()))
         # capturar cliques do mouse
         self.canvas.bind("<Button-1>", self.on_click)
 
@@ -122,6 +194,22 @@ class GraphicSystem:
         for obj in self.display.objects:
             self.objects_listbox.insert(tk.END, obj.name)
 
+    def set_clipping_mode(self, mode):
+        self.clipping_mode = mode
+    
+    def clip_point(self, x, y):
+        x_min, y_min, x_max, y_max = self.window.x_min, self.window.y_min, self.window.x_max, self.window.y_max
+        return x_min <= x <= x_max and y_min <= y <= y_max
+    
+    def clip_line(self, p1, p2):
+        if self.clipping_mode == "CS":
+            return cohen_sutherland(p1[0], p1[1], p2[0], p2[1], self.window)
+        else:
+            return liang_barsky(p1[0], p1[1], p2[0], p2[1], self.window)
+
+    def clip_polygon(self, points):
+        return sutherland_hodgman(points, self.window)
+
     def move(self, dx, dy):
         self.window.pan(dx, dy)
         self.redraw()
@@ -145,6 +233,7 @@ class GraphicSystem:
 
     def zoom(self, factor):
         self.window.zoom(factor)
+        self.viewport.update_rect()
         self.redraw()
 
     def bind_mouse_scroll(self):
@@ -172,23 +261,45 @@ class GraphicSystem:
 
     def redraw(self):
         self.canvas.delete("all")
+        self.viewport.draw_frame(color="red")
         for obj in self.display.objects:
             coords = [self.viewport.world_to_viewport(x, y) for (x, y) in obj.coordinates]
 
             if obj.obj_type == POINT:
                 if not coords:
                     continue
-                x, y = coords[0]
-                self.canvas.create_oval(x-3, y-3, x+3, y+3, fill=obj.color, outline=obj.color)
+                if self.clip_point(obj.coordinates[0][0], obj.coordinates[0][1]):
+                    x, y = coords[0]
+                    self.canvas.create_oval(x-3, y-3, x+3, y+3, fill=obj.color, outline=obj.color)
+            
             elif obj.obj_type == LINE:
-                if len(coords) >= 2:
-                    self.canvas.create_line(coords[0], coords[1], fill=obj.color)
+                if len(obj.coordinates) >= 2:
+                    clipped = self.clip_line(obj.coordinates[0], obj.coordinates[1])
+                    if clipped:
+                        x1, y1, x2, y2 = clipped
+                        c1 = self.viewport.world_to_viewport(x1, y1)
+                        c2 = self.viewport.world_to_viewport(x2, y2)
+                        self.canvas.create_line(c1, c2, fill=obj.color)
+
             elif obj.obj_type == WIREFRAME:
-                if len(coords) >= 2:
-                    for i in range(len(coords)):
-                        x1, y1 = coords[i]
-                        x2, y2 = coords[(i + 1) % len(coords)]
-                        self.canvas.create_line(x1, y1, x2, y2, fill=obj.color)
+                if len(obj.coordinates) >= 3:
+                    clipped_poly = self.clip_polygon(obj.coordinates)
+                    if clipped_poly:
+                        pv = [self.viewport.world_to_viewport(x, y) for (x, y) in clipped_poly]
+                        if getattr(obj, "filled", False):
+                            flat = []
+                            for (x, y) in pv:
+                                flat.extend([x, y])
+                            self.canvas.create_polygon(
+                                *flat,
+                                outline=obj.color,
+                                fill=(obj.fill_color or obj.color)
+                            )
+                        else:
+                            for i in range(len(pv)):
+                                x1, y1 = pv[i]
+                                x2, y2 = pv[(i + 1) % len(pv)]
+                                self.canvas.create_line(x1, y1, x2, y2, fill=obj.color)
 
         # Desenhar pontos temporários para linhas e wireframes em construção
         if self.current_type in [WIREFRAME, LINE] and self.current_points:
@@ -206,53 +317,45 @@ class GraphicSystem:
 
     def on_click(self, event):
         # converter clique para coordenadas do mundo
-        vx, vy = event.x, event.y
-        w = self.window.width()
-        h = self.window.height()
-        vx_size = self.canvas.winfo_width()
-        vy_size = self.canvas.winfo_height()
-        sx = vx_size / w
-        sy = vy_size / h
-        s = min(sx, sy)
-
-        offset_x = (vx_size - s * w) / 2
-        offset_y = (vy_size - s * h) / 2
-
-        xw = (vx - offset_x) / s + self.window.x_min
-        yw = self.window.y_max - (vy - offset_y) / s
-
-        cx = (self.window.x_min + self.window.x_max) / 2
-        cy = (self.window.y_min + self.window.y_max) / 2
-        ang = math.radians(self.window.rotation_angle)
-        cosA, sinA = math.cos(ang), math.sin(ang)
-
-        x_rel, y_rel = xw - cx, yw - cy
-        x_rot = x_rel * cosA + y_rel * sinA
-        y_rot = -x_rel * sinA + y_rel * cosA
-        xw, yw = x_rot + cx, y_rot + cy
-
+        xw, yw = self.viewport.viewport_to_world(event.x, event.y)
         self.current_points.append((xw, yw))
 
         if self.current_type == POINT:
             self.add_object(options_label[POINT], POINT, self.current_points, self.default_color)
             self.current_points = []
-
         elif self.current_type == LINE and len(self.current_points) == 2:
             self.add_object(options_label[LINE], LINE, self.current_points, self.default_color)
             self.current_points = []
 
         self.redraw()
 
-    def add_object(self, name, obj_type, coords, color="#000000"):
+    # kwargs para não quebrar chamadas existentes
+    def add_object(self, name, obj_type, coords, color="#000000", **kwargs):
         self.object_count += 1
-        obj = Object2D(f"{name}_{self.object_count}", obj_type, coords.copy(), color=color)
+        obj = Object2D(f"{name}_{self.object_count}", obj_type, coords.copy(), color=color, **kwargs)
         self.display.add(obj)
         self.refresh_listbox()
         self.redraw()
 
     def finalize_wireframe(self):
         if len(self.current_points) > 2:
-            self.add_object(options_label[WIREFRAME], WIREFRAME, self.current_points, color=self.default_color)
+            filled = False
+            fill_color = None
+            try:
+                filled = bool(self.fill_var.get())
+            except Exception:
+                pass  # se a UI ainda não fornece, mantém False
+            if filled:
+                fill_color = self.default_color  # ou outra cor de preenchimento
+
+            self.add_object(
+                options_label[WIREFRAME],
+                WIREFRAME,
+                self.current_points,
+                color=self.default_color,
+                filled=filled,
+                fill_color=fill_color
+            )
         self.current_points = []
         self.redraw()
 
@@ -387,6 +490,22 @@ class GraphicSystem:
         self.redraw()
         self.refresh_listbox()
         self.update_coords_label(obj)
+
+    def _rotate_point(self, x, y, angle_deg, cx, cy):
+        ang = math.radians(angle_deg)
+        cosA, sinA = math.cos(ang), math.sin(ang)
+        xr = (x - cx) * cosA - (y - cy) * sinA + cx
+        yr = (x - cx) * sinA + (y - cy) * cosA + cy
+        return xr, yr
+
+    def _inv_rotate_point(self, x, y, angle_deg, cx, cy):
+        # inversa: ângulo negativo
+        return self._rotate_point(x, y, -angle_deg, cx, cy)
+
+    def _window_center(self):
+        cx = (self.window.x_min + self.window.x_max) / 2.0
+        cy = (self.window.y_min + self.window.y_max) / 2.0
+        return cx, cy
 
     def set_default_color(self):
         c = colorchooser.askcolor(title="Escolher cor padrão")[1]
