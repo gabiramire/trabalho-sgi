@@ -518,9 +518,15 @@ class GraphicSystem:
             messagebox.showinfo("Aviso", "Selecione um objeto na lista.")
             return
         c = colorchooser.askcolor(title=f"Cor para {obj.name}")[1]
-        if c:
-            obj.color = c
-            self.redraw()
+        if not c:
+            return
+        obj.color = c
+
+        # se for polígono e estiver preenchido, atualiza também a cor de preenchimento
+        if obj.obj_type == WIREFRAME and getattr(obj, "filled", False):
+            obj.fill_color = c  # usa a mesma cor escolhida
+        
+        self.redraw()
 
     def delete_selected(self):
         obj = self.get_selected_object()
