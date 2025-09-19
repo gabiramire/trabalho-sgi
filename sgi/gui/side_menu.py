@@ -118,30 +118,22 @@ def create_object_choice(menu_frame, system, canvas):
 
     def set_type(*args):
         label = type_var.get()
-        for key, val in options_label.items():
-            if val == label:
-                system.current_type = key
-                break
+        system.current_type = next(
+            (k for k, v in options_label.items() if v == label), None
+        )
         system.current_points = []
 
+        widgets = [btn_poly, btn_fill, btn_curve, cont_g0, cont_g1]
+        for widget in widgets:
+            widget.pack_forget()
+
         if system.current_type == WIREFRAME:
-            btn_curve.pack_forget()
-            cont_g0.pack_forget()
-            cont_g1.pack_forget()
             btn_poly.pack(pady=6, fill=tk.X, after=type_menu)
             btn_fill.pack(anchor="w", after=btn_poly)
         elif system.current_type == CURVE:
-            btn_poly.pack_forget()
-            btn_fill.pack_forget()
             btn_curve.pack(pady=6, fill=tk.X, after=type_menu)
             cont_g0.pack(anchor="w", after=btn_curve)
             cont_g1.pack(anchor="w", after=cont_g0)
-        else:
-            btn_poly.pack_forget()
-            btn_fill.pack_forget()
-            btn_curve.pack_forget()
-            cont_g0.pack_forget()
-            cont_g1.pack_forget()
 
         update_scrollregion()
 
