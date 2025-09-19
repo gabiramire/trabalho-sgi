@@ -1,41 +1,10 @@
 import tkinter as tk
-from gaphic_system.objects import POINT, options_label
+from graphic_system.objects import POINT, options_label
 
 def create_side_menu(root, main_frame, system):
     # Menu lateral (Frame) com as opções
     side_frame = tk.Frame(root)
     side_frame.pack(side=tk.LEFT, fill=tk.Y)
-
-    side_frame = tk.Frame(root)
-    side_frame.pack(side=tk.LEFT, fill=tk.Y)
-
-    # Seleção do algoritmo de clipping
-    tk.Label(side_frame, text="Clipping de Retas:").pack()
-
-    tk.Radiobutton(
-        side_frame,
-        text="Cohen-Sutherland",
-        variable=system.clip_var,
-        value="CS",
-        command=lambda: system.set_clipping_mode(system.clip_var.get())
-    ).pack(anchor='w')
-
-    tk.Radiobutton(
-        side_frame,
-        text="Liang-Barsky",
-        variable=system.clip_var,
-        value="LB",
-        command=lambda: system.set_clipping_mode(system.clip_var.get())
-    ).pack(anchor='w')
-
-    # Lógica de preenchimento de polígonos
-    fill_var = tk.BooleanVar(value=False)
-    tk.Label(side_frame, text="Polígono preenchido:").pack()
-    tk.Checkbutton(
-        side_frame,
-        text="Preencher",
-        variable=system.fill_var  # <- usa a BooleanVar do GraphicSystem
-    ).pack(anchor='w')
 
     # Canvas para permitir o scroll
     canvas = tk.Canvas(side_frame, width=240)
@@ -84,6 +53,7 @@ def create_side_menu(root, main_frame, system):
     list_objects_listbox(menu_frame, system)
     create_transform_frame(menu_frame, system, main_frame)
     create_window_controls(menu_frame, system)
+    create_clipping_controls(menu_frame, system)
 
     # Atalhos úteis
     help_label = tk.Label(menu_frame, text="Uso rápido:\n- Clique para criar pontos/linhas\n- Finalizar wireframe para polígonos\n- Selecione objeto na lista para transformar", wraplength=200, justify="left")
@@ -109,6 +79,13 @@ def create_object_choice(menu_frame, system):
     btn_poly = tk.Button(menu_frame, text="Finalizar Wireframe", command=system.finalize_wireframe)
     btn_poly.pack(pady=6, fill=tk.X)
 
+    # Lógica de preenchimento de polígonos
+    tk.Checkbutton(
+        menu_frame,
+        text="Preencher Polígono",
+        variable=system.fill_var  # <- usa a BooleanVar do GraphicSystem
+    ).pack(anchor="w")
+
 def create_default_color(menu_frame, system):
     # Cor padrão para novos objetos
     color_frame = tk.Frame(menu_frame)
@@ -126,7 +103,7 @@ def list_objects_listbox(menu_frame, system):
 
 def create_transform_frame(menu_frame, system, main_frame):
     # Botões de transformação
-    tf_frame = tk.LabelFrame(menu_frame, text="Transformações", padx=5, pady=5)
+    tf_frame = tk.LabelFrame(menu_frame, text="Transformações", font=("Arial", 11, "bold"), padx=5, pady=5)
     tf_frame.pack(fill=tk.X, padx=5, pady=6)
 
     btn_translate = tk.Button(tf_frame, text="Transladar", command=system.translate_selected)
@@ -156,7 +133,7 @@ def create_transform_frame(menu_frame, system, main_frame):
 def create_window_controls(menu_frame, system):
     # Sub-menu (LabelFrame) com opções de movimentação e zoom da window contido no menu lateral
     window_frame = tk.LabelFrame(
-        menu_frame, text="Window", font=("Arial", 11, "bold"), labelanchor="n", padx=5, pady=5
+        menu_frame, text="Window", font=("Arial", 11, "bold"), padx=5, pady=5
     )
     window_frame.pack(fill=tk.X, padx=10, pady=8)
 
@@ -192,3 +169,27 @@ def create_window_controls(menu_frame, system):
     btn_rotate_left.pack(side=tk.LEFT, padx=2)
     btn_rotate_right = tk.Button(rotate_frame, text="⟳", command=lambda: (system.window.rotate(-5), system.redraw()))
     btn_rotate_right.pack(side=tk.LEFT, padx=2)
+
+
+# Seleção do algoritmo de clipping
+def create_clipping_controls(menu_frame, system):
+    clipping_frame = tk.LabelFrame(menu_frame, text="Clipping", font=("Arial", 11, "bold"), padx=5, pady=5)
+    clipping_frame.pack(fill=tk.X, padx=5, pady=6)
+
+    tk.Label(clipping_frame, text="Clipping de Retas:").pack(anchor="w")
+
+    tk.Radiobutton(
+        clipping_frame,
+        text="Cohen-Sutherland",
+        variable=system.clip_var,
+        value="CS",
+        command=lambda: system.set_clipping_mode(system.clip_var.get())
+    ).pack(anchor='w')
+
+    tk.Radiobutton(
+        clipping_frame,
+        text="Liang-Barsky",
+        variable=system.clip_var,
+        value="LB",
+        command=lambda: system.set_clipping_mode(system.clip_var.get()),
+    ).pack(anchor='w')
