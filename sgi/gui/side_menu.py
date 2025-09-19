@@ -1,5 +1,6 @@
 import tkinter as tk
-from graphic_system.objects import POINT, WIREFRAME, options_label
+
+from graphic_system.objects import CURVE, POINT, WIREFRAME, options_label
 
 
 def create_side_menu(root, main_frame, system):
@@ -95,6 +96,26 @@ def create_object_choice(menu_frame, system, canvas):
         variable=system.fill_var,
     )
 
+    btn_curve = tk.Button(
+        menu_frame, text="Finalizar Curva", command=system.finalize_curve
+    )
+
+    cont_g0 = tk.Radiobutton(
+        menu_frame,
+        text="Multi-segmentada G(0)",
+        variable=system.curve_mode_var,
+        value="G0",
+        command=lambda: system.set_curve_mode(system.curve_mode_var.get()),
+    )
+
+    cont_g1 = tk.Radiobutton(
+        menu_frame,
+        text="Contínua G(1)",
+        variable=system.curve_mode_var,
+        value="G1",
+        command=lambda: system.set_curve_mode(system.curve_mode_var.get()),
+    )
+
     def set_type(*args):
         label = type_var.get()
         for key, val in options_label.items():
@@ -104,11 +125,23 @@ def create_object_choice(menu_frame, system, canvas):
         system.current_points = []
 
         if system.current_type == WIREFRAME:
+            btn_curve.pack_forget()
+            cont_g0.pack_forget()
+            cont_g1.pack_forget()
             btn_poly.pack(pady=6, fill=tk.X, after=type_menu)
             btn_fill.pack(anchor="w", after=btn_poly)
+        elif system.current_type == CURVE:
+            btn_poly.pack_forget()
+            btn_fill.pack_forget()
+            btn_curve.pack(pady=6, fill=tk.X, after=type_menu)
+            cont_g0.pack(anchor="w", after=btn_curve)
+            cont_g1.pack(anchor="w", after=cont_g0)
         else:
             btn_poly.pack_forget()
             btn_fill.pack_forget()
+            btn_curve.pack_forget()
+            cont_g0.pack_forget()
+            cont_g1.pack_forget()
 
         update_scrollregion()
 

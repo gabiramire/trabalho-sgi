@@ -1,17 +1,18 @@
 import math
 import tkinter as tk
-from tkinter import simpledialog, colorchooser, messagebox, filedialog
+from tkinter import colorchooser, filedialog, messagebox, simpledialog
 
-from .objects import Object2D, DisplayFile, POINT, LINE, WIREFRAME, options_label
+from .bezier_curve import bezier_curve, bezier_multisegment
+from .clipping import cohen_sutherland, liang_barsky, sutherland_hodgman
+from .obj_descriptor import DescritorOBJ
+from .objects import CURVE, LINE, POINT, WIREFRAME, DisplayFile, Object2D, options_label
 from .transform import (
     apply_transform,
-    make_translation,
-    make_scale,
-    make_rotation,
     centroid,
+    make_rotation,
+    make_scale,
+    make_translation,
 )
-from .obj_descriptor import DescritorOBJ
-from .clipping import cohen_sutherland, liang_barsky, sutherland_hodgman
 
 
 class Window:
@@ -161,10 +162,12 @@ class GraphicSystem:
         self.default_color = "#000000"
 
         self.clipping_mode = "CS"  # ou "LB"
+        self.curve_mode = "G0"  # ou "G1"
 
         # variáveis para UI
         self.clip_var = tk.StringVar(value="CS")
         self.fill_var = tk.BooleanVar(value=False)
+        self.curve_mode_var = tk.StringVar(value="G0")
 
         # redesenhar ao redimensionar
         self.canvas.bind(
@@ -208,6 +211,10 @@ class GraphicSystem:
 
     def set_clipping_mode(self, mode):
         self.clipping_mode = mode
+
+    def set_curve_mode(self, mode):
+        self.curve_mode = mode
+        self.redraw()
 
     def clip_point(self, x, y):
         x_min, y_min, x_max, y_max = (
@@ -272,7 +279,11 @@ class GraphicSystem:
         if obj is None:
             self.coords_label.config(text="(nenhum objeto selecionado)")
             return
-        coords_str = " ".join([f"({x:.2f},{y:.2f})" for x, y in obj.coordinates])
+        max_coords = 7
+        coords_list = obj.coordinates[:max_coords]
+        coords_str = " ".join([f"({x:.2f},{y:.2f})" for x, y in coords_list])
+        if len(obj.coordinates) > max_coords:
+            coords_str += " ..."
         self.coords_label.config(text=f"{obj.name}: {coords_str}")
 
     def redraw(self):
@@ -324,8 +335,25 @@ class GraphicSystem:
                                 x2, y2 = pv[(i + 1) % len(pv)]
                                 self.canvas.create_line(x1, y1, x2, y2, fill=obj.color)
 
+            elif obj.obj_type == CURVE:
+                if len(obj.coordinates) >= 2:
+                    mode = getattr(obj, "curve_mode", "G0")
+                    if mode == "G0":
+                        curve_pts = bezier_multisegment(
+                            obj.coordinates, num_samples=200
+                        )
+                    else:  # G1
+                        curve_pts = bezier_curve(obj.coordinates, num_samples=200)
+                    for i in range(len(curve_pts) - 1):
+                        clipped = self.clip_line(curve_pts[i], curve_pts[i + 1])
+                        if clipped:
+                            x1, y1, x2, y2 = clipped
+                            c1 = self.viewport.world_to_viewport(x1, y1)
+                            c2 = self.viewport.world_to_viewport(x2, y2)
+                            self.canvas.create_line(c1, c2, fill=obj.color)
+
         # Desenhar pontos temporários para linhas e wireframes em construção
-        if self.current_type in [WIREFRAME, LINE] and self.current_points:
+        if self.current_type in [WIREFRAME, LINE, CURVE] and self.current_points:
             p_coords = [
                 self.viewport.world_to_viewport(x, y) for (x, y) in self.current_points
             ]
@@ -341,6 +369,34 @@ class GraphicSystem:
                     x1, y1 = p_coords[i]
                     x2, y2 = p_coords[i + 1]
                     self.canvas.create_line(x1, y1, x2, y2, dash=(3, 3))
+
+            # Prévia para curva de bézier
+            elif self.current_type == CURVE:
+                # desenhar polígono de controle (linhas guias)
+                if len(p_coords) >= 2:
+                    for i in range(len(p_coords) - 1):
+                        x1, y1 = p_coords[i]
+                        x2, y2 = p_coords[i + 1]
+                        self.canvas.create_line(
+                            x1, y1, x2, y2, dash=(2, 4), fill="gray"
+                        )
+
+                # se houver 3+ pontos, desenhar curva prévia
+                if len(self.current_points) >= 3:
+                    mode = getattr(self, "curve_mode", "G0")
+                    if mode == "G0":
+                        curve_pts = bezier_multisegment(
+                            self.current_points, num_samples=100
+                        )
+                    else:  # G1
+                        curve_pts = bezier_curve(self.current_points, num_samples=100)
+                    v_coords = [
+                        self.viewport.world_to_viewport(x, y) for (x, y) in curve_pts
+                    ]
+                    for i in range(len(v_coords) - 1):
+                        x1, y1 = v_coords[i]
+                        x2, y2 = v_coords[i + 1]
+                        self.canvas.create_line(x1, y1, x2, y2, fill="blue")
 
     def on_click(self, event):
         # converter clique para coordenadas do mundo
@@ -361,13 +417,16 @@ class GraphicSystem:
         self.redraw()
 
     # kwargs para não quebrar chamadas existentes
-    def add_object(self, name, obj_type, coords, color="#000000", **kwargs):
+    def add_object(
+        self, name, obj_type, coords, color="#000000", curve_mode="G0", **kwargs
+    ):
         self.object_count += 1
         obj = Object2D(
             f"{name}_{self.object_count}",
             obj_type,
             coords.copy(),
             color=color,
+            curve_mode=curve_mode,
             **kwargs,
         )
         self.display.add(obj)
@@ -392,6 +451,18 @@ class GraphicSystem:
                 color=self.default_color,
                 filled=filled,
                 fill_color=fill_color,
+            )
+        self.current_points = []
+        self.redraw()
+
+    def finalize_curve(self):
+        if len(self.current_points) >= 2:
+            self.add_object(
+                options_label[CURVE],
+                CURVE,
+                self.current_points,
+                self.default_color,
+                curve_mode=self.curve_mode,
             )
         self.current_points = []
         self.redraw()

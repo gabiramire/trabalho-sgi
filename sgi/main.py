@@ -1,7 +1,8 @@
 import tkinter as tk
+
 from graphic_system.core import GraphicSystem
-from gui.side_menu import create_side_menu
 from gui.menu_bar import create_menu_bar
+from gui.side_menu import create_side_menu
 
 
 def main():

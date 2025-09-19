@@ -1,12 +1,17 @@
 from typing import List, Tuple
 
-
 # Tipos de objeto
 POINT = "point"
 LINE = "line"
 WIREFRAME = "wireframe"  # polígono = wireframe
+CURVE = "curve"
 
-options_label = {POINT: "Ponto", LINE: "Linha", WIREFRAME: "Wireframe"}
+options_label = {
+    POINT: "Ponto",
+    LINE: "Linha",
+    WIREFRAME: "Wireframe",
+    CURVE: "Curva Bézier",
+}
 
 
 # =====================
@@ -21,6 +26,7 @@ class Object2D:
         color: str = "#000000",
         fill_color: str = "#FFFFFF",
         filled: bool = False,
+        curve_mode: str = "G0",
     ):
         self.name = name
         self.obj_type = obj_type
@@ -28,6 +34,7 @@ class Object2D:
         self.color = color  # cor de contorno (RGBf hex)
         self.fill_color = fill_color  # cor de preenchimento (apenas para wireframes)
         self.filled = filled  # se o objeto é preenchido (apenas para wireframes)
+        self.curve_mode = curve_mode  # modo da curva (apenas para curvas)
 
 
 class DisplayFile:
