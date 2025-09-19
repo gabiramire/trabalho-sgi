@@ -1,5 +1,6 @@
 from .objects import Object2D, POINT, LINE, WIREFRAME
 
+
 class DescritorOBJ:
     @staticmethod
     def export_object(obj, index_offset=1):
@@ -7,7 +8,7 @@ class DescritorOBJ:
         lines.append(f"o {obj.name}")
 
         # exportar vértices
-        for (x, y) in obj.coordinates:
+        for x, y in obj.coordinates:
             lines.append(f"v {x:.6f} {y:.6f}")
 
         # exportar arestas de acordo com tipo
@@ -22,7 +23,9 @@ class DescritorOBJ:
             next_offset = index_offset + 2
 
         elif obj.obj_type == WIREFRAME:
-            indices = [str(i) for i in range(index_offset, index_offset + len(obj.coordinates))]
+            indices = [
+                str(i) for i in range(index_offset, index_offset + len(obj.coordinates))
+            ]
             indices.append(str(index_offset))
             lines.append("l " + " ".join(indices))
             next_offset = index_offset + len(obj.coordinates)
@@ -81,9 +84,9 @@ class DescritorOBJ:
             objects.append(Object2D(current_name, obj_type, coords))
 
         return objects
-    
+
     @staticmethod
-    def _infer_type(indices): # definir o tipo de objeto (ponto, linha, wireframe)
+    def _infer_type(indices):  # definir o tipo de objeto (ponto, linha, wireframe)
         if len(indices) == 1:
             return POINT
         elif len(indices) == 2:

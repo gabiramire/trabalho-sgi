@@ -1,13 +1,19 @@
 # clipping.py
 INSIDE, LEFT, RIGHT, BOTTOM, TOP = 0, 1, 2, 4, 8
 
+
 def compute_out_code(x, y, window):
     code = INSIDE
-    if x < window.x_min: code |= LEFT
-    elif x > window.x_max: code |= RIGHT
-    if y < window.y_min: code |= BOTTOM
-    elif y > window.y_max: code |= TOP
+    if x < window.x_min:
+        code |= LEFT
+    elif x > window.x_max:
+        code |= RIGHT
+    if y < window.y_min:
+        code |= BOTTOM
+    elif y > window.y_max:
+        code |= TOP
     return code
+
 
 # -- Clipping de Pontos --
 def clip_point(x, y, window):
@@ -15,6 +21,7 @@ def clip_point(x, y, window):
     if window.x_min <= x <= window.x_max and window.y_min <= y <= window.y_max:
         return (x, y)
     return None
+
 
 # -- Clipping de Retas --
 def cohen_sutherland(x1, y1, x2, y2, window):
@@ -75,17 +82,21 @@ def liang_barsky(x1, y1, x2, y2, window):
     if u1 > u2:
         return None
 
-    return (x1 + u1*dx, y1 + u1*dy, x1 + u2*dx, y1 + u2*dy)
+    return (x1 + u1 * dx, y1 + u1 * dy, x1 + u2 * dx, y1 + u2 * dy)
 
 
 # -- Clipping de Polígonos --
 def sutherland_hodgman(polygon, window):
     def inside(p, edge):
         x, y = p
-        if edge == "LEFT":   return x >= window.x_min
-        if edge == "RIGHT":  return x <= window.x_max
-        if edge == "BOTTOM": return y >= window.y_min
-        if edge == "TOP":    return y <= window.y_max
+        if edge == "LEFT":
+            return x >= window.x_min
+        if edge == "RIGHT":
+            return x <= window.x_max
+        if edge == "BOTTOM":
+            return y >= window.y_min
+        if edge == "TOP":
+            return y <= window.y_max
         return True
 
     def intersect(p1, p2, edge):

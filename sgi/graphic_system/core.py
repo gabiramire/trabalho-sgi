@@ -3,9 +3,16 @@ import tkinter as tk
 from tkinter import simpledialog, colorchooser, messagebox, filedialog
 
 from .objects import Object2D, DisplayFile, POINT, LINE, WIREFRAME, options_label
-from .transform import apply_transform, make_translation, make_scale, make_rotation, centroid
+from .transform import (
+    apply_transform,
+    make_translation,
+    make_scale,
+    make_rotation,
+    centroid,
+)
 from .obj_descriptor import DescritorOBJ
 from .clipping import cohen_sutherland, liang_barsky, sutherland_hodgman
+
 
 class Window:
     def __init__(self, x_min=-100, x_max=100, y_min=-100, y_max=100):
@@ -38,6 +45,7 @@ class Window:
     def rotate(self, angle_deg):
         self.rotation_angle = (self.rotation_angle + angle_deg) % 360
 
+
 class Viewport:
     def __init__(self, canvas: tk.Canvas, window: Window):
         self.canvas = canvas
@@ -45,8 +53,8 @@ class Viewport:
         # retângulo fixo da viewport (margens): (10,10) até (largura-40, altura-30)
         self.px0 = 10
         self.py0 = 10
-        self.px1 = 0   # será calculado
-        self.py1 = 0   # será calculado
+        self.px1 = 0  # será calculado
+        self.py1 = 0  # será calculado
 
     def update_rect(self):
         w = max(self.canvas.winfo_width(), 1)
@@ -130,19 +138,21 @@ class Viewport:
 
     # linha para visualizar o clipping
     def draw_frame(self, color="red"):
-        self.canvas.create_rectangle(self.px0, self.py0, self.px1, self.py1, outline=color, width=2)
+        self.canvas.create_rectangle(
+            self.px0, self.py0, self.px1, self.py1, outline=color, width=2
+        )
 
 
 class GraphicSystem:
     def __init__(self, root, canvas_parent):
-        self.canvas = tk.Canvas(canvas_parent, width=800, height=600, bg='white')
+        self.canvas = tk.Canvas(canvas_parent, width=800, height=600, bg="white")
         self.canvas.pack(fill=tk.BOTH, expand=True)
 
         self.display = DisplayFile()
         self.window = Window()
         self.viewport = Viewport(self.canvas, self.window)
         self.canvas.update_idletasks()  # mede o tamanho real do canvas
-        self.viewport.update_rect()     # calcula (px0,py0)-(px1,py1)
+        self.viewport.update_rect()  # calcula (px0,py0)-(px1,py1)
         self.canvas.after(0, lambda: (self.viewport.update_rect(), self.redraw()))
 
         self.current_points = []  # pontos coletados via clique
@@ -150,14 +160,16 @@ class GraphicSystem:
         self.object_count = 0
         self.default_color = "#000000"
 
-        self.clipping_mode = "CS"  # ou "LB" 
+        self.clipping_mode = "CS"  # ou "LB"
 
         # variáveis para UI
         self.clip_var = tk.StringVar(value="CS")
         self.fill_var = tk.BooleanVar(value=False)
 
         # redesenhar ao redimensionar
-        self.canvas.bind("<Configure>", lambda e: (self.viewport.update_rect(), self.redraw()))
+        self.canvas.bind(
+            "<Configure>", lambda e: (self.viewport.update_rect(), self.redraw())
+        )
         # capturar cliques do mouse
         self.canvas.bind("<Button-1>", self.on_click)
 
@@ -196,11 +208,16 @@ class GraphicSystem:
 
     def set_clipping_mode(self, mode):
         self.clipping_mode = mode
-    
+
     def clip_point(self, x, y):
-        x_min, y_min, x_max, y_max = self.window.x_min, self.window.y_min, self.window.x_max, self.window.y_max
+        x_min, y_min, x_max, y_max = (
+            self.window.x_min,
+            self.window.y_min,
+            self.window.x_max,
+            self.window.y_max,
+        )
         return x_min <= x <= x_max and y_min <= y <= y_max
-    
+
     def clip_line(self, p1, p2):
         if self.clipping_mode == "CS":
             return cohen_sutherland(p1[0], p1[1], p2[0], p2[1], self.window)
@@ -258,20 +275,23 @@ class GraphicSystem:
         coords_str = " ".join([f"({x:.2f},{y:.2f})" for x, y in obj.coordinates])
         self.coords_label.config(text=f"{obj.name}: {coords_str}")
 
-
     def redraw(self):
         self.canvas.delete("all")
         self.viewport.draw_frame(color="red")
         for obj in self.display.objects:
-            coords = [self.viewport.world_to_viewport(x, y) for (x, y) in obj.coordinates]
+            coords = [
+                self.viewport.world_to_viewport(x, y) for (x, y) in obj.coordinates
+            ]
 
             if obj.obj_type == POINT:
                 if not coords:
                     continue
                 if self.clip_point(obj.coordinates[0][0], obj.coordinates[0][1]):
                     x, y = coords[0]
-                    self.canvas.create_oval(x-3, y-3, x+3, y+3, fill=obj.color, outline=obj.color)
-            
+                    self.canvas.create_oval(
+                        x - 3, y - 3, x + 3, y + 3, fill=obj.color, outline=obj.color
+                    )
+
             elif obj.obj_type == LINE:
                 if len(obj.coordinates) >= 2:
                     clipped = self.clip_line(obj.coordinates[0], obj.coordinates[1])
@@ -285,15 +305,18 @@ class GraphicSystem:
                 if len(obj.coordinates) >= 3:
                     clipped_poly = self.clip_polygon(obj.coordinates)
                     if clipped_poly:
-                        pv = [self.viewport.world_to_viewport(x, y) for (x, y) in clipped_poly]
+                        pv = [
+                            self.viewport.world_to_viewport(x, y)
+                            for (x, y) in clipped_poly
+                        ]
                         if getattr(obj, "filled", False):
                             flat = []
-                            for (x, y) in pv:
+                            for x, y in pv:
                                 flat.extend([x, y])
                             self.canvas.create_polygon(
                                 *flat,
                                 outline=obj.color,
-                                fill=(obj.fill_color or obj.color)
+                                fill=(obj.fill_color or obj.color),
                             )
                         else:
                             for i in range(len(pv)):
@@ -303,10 +326,14 @@ class GraphicSystem:
 
         # Desenhar pontos temporários para linhas e wireframes em construção
         if self.current_type in [WIREFRAME, LINE] and self.current_points:
-            p_coords = [self.viewport.world_to_viewport(x, y) for (x, y) in self.current_points]
+            p_coords = [
+                self.viewport.world_to_viewport(x, y) for (x, y) in self.current_points
+            ]
 
-            for (px, py) in p_coords:
-                self.canvas.create_oval(px-3, py-3, px+3, py+3, outline="red", fill="red")
+            for px, py in p_coords:
+                self.canvas.create_oval(
+                    px - 3, py - 3, px + 3, py + 3, outline="red", fill="red"
+                )
 
             # Linhas de prévia entre os pontos já clicados para wireframes
             if len(p_coords) >= 2 and self.current_type == WIREFRAME:
@@ -321,10 +348,14 @@ class GraphicSystem:
         self.current_points.append((xw, yw))
 
         if self.current_type == POINT:
-            self.add_object(options_label[POINT], POINT, self.current_points, self.default_color)
+            self.add_object(
+                options_label[POINT], POINT, self.current_points, self.default_color
+            )
             self.current_points = []
         elif self.current_type == LINE and len(self.current_points) == 2:
-            self.add_object(options_label[LINE], LINE, self.current_points, self.default_color)
+            self.add_object(
+                options_label[LINE], LINE, self.current_points, self.default_color
+            )
             self.current_points = []
 
         self.redraw()
@@ -332,7 +363,13 @@ class GraphicSystem:
     # kwargs para não quebrar chamadas existentes
     def add_object(self, name, obj_type, coords, color="#000000", **kwargs):
         self.object_count += 1
-        obj = Object2D(f"{name}_{self.object_count}", obj_type, coords.copy(), color=color, **kwargs)
+        obj = Object2D(
+            f"{name}_{self.object_count}",
+            obj_type,
+            coords.copy(),
+            color=color,
+            **kwargs,
+        )
         self.display.add(obj)
         self.refresh_listbox()
         self.redraw()
@@ -354,7 +391,7 @@ class GraphicSystem:
                 self.current_points,
                 color=self.default_color,
                 filled=filled,
-                fill_color=fill_color
+                fill_color=fill_color,
             )
         self.current_points = []
         self.redraw()
@@ -390,7 +427,6 @@ class GraphicSystem:
         self.refresh_listbox()
         self.update_coords_label(obj)
 
-
     def scale_selected(self):
         obj = self.get_selected_object()
         if obj is None:
@@ -401,7 +437,11 @@ class GraphicSystem:
         if sx is None:
             return
 
-        sy_str = simpledialog.askstring("Escalonamento", "sy (deixe vazio para usar sx):", parent=self.objects_listbox)
+        sy_str = simpledialog.askstring(
+            "Escalonamento",
+            "sy (deixe vazio para usar sx):",
+            parent=self.objects_listbox,
+        )
         if sy_str is None:
             return
         elif sy_str.strip() == "":
@@ -412,20 +452,25 @@ class GraphicSystem:
             except ValueError:
                 messagebox.showerror("Erro", "Valor inválido para sy.")
                 return
-        
+
         if sy is None:
             sy = sx
         # centro: por padrão centro do objeto (escalonamento "natural")
         center_choice = messagebox.askyesno(
-            "Centro", "Usar centro do objeto como centro do escalonamento?\n(Yes = centro do objeto, No = escolher ponto arbitrário)"
+            "Centro",
+            "Usar centro do objeto como centro do escalonamento?\n(Yes = centro do objeto, No = escolher ponto arbitrário)",
         )
         if center_choice:
             cx, cy = centroid(obj.coordinates)
         else:
-            cx = simpledialog.askfloat("Centro arbitrário", "cx:", parent=self.objects_listbox)
+            cx = simpledialog.askfloat(
+                "Centro arbitrário", "cx:", parent=self.objects_listbox
+            )
             if cx is None:
                 return
-            cy = simpledialog.askfloat("Centro arbitrário", "cy:", parent=self.objects_listbox)
+            cy = simpledialog.askfloat(
+                "Centro arbitrário", "cy:", parent=self.objects_listbox
+            )
             if cy is None:
                 return
         M = make_scale(sx, sy, cx, cy)
@@ -451,9 +496,18 @@ class GraphicSystem:
         btn_frame = tk.Frame(popup)
         btn_frame.pack(pady=10)
 
-        tk.Button(btn_frame, text="Mundo", width=12, command=lambda: set_choice("mundo")).pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_frame, text="Objeto", width=12, command=lambda: set_choice("objeto")).pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_frame, text="Arbitrário", width=12, command=lambda: set_choice("arbitrario")).pack(side=tk.LEFT, padx=5)
+        tk.Button(
+            btn_frame, text="Mundo", width=12, command=lambda: set_choice("mundo")
+        ).pack(side=tk.LEFT, padx=5)
+        tk.Button(
+            btn_frame, text="Objeto", width=12, command=lambda: set_choice("objeto")
+        ).pack(side=tk.LEFT, padx=5)
+        tk.Button(
+            btn_frame,
+            text="Arbitrário",
+            width=12,
+            command=lambda: set_choice("arbitrario"),
+        ).pack(side=tk.LEFT, padx=5)
 
         popup.wait_window()
         return result["choice"]
@@ -463,7 +517,11 @@ class GraphicSystem:
         if obj is None:
             messagebox.showinfo("Aviso", "Selecione um objeto na lista.")
             return
-        ang = simpledialog.askfloat("Rotação", "Ângulo em graus (positivo: anti-horário):", parent=self.objects_listbox)
+        ang = simpledialog.askfloat(
+            "Rotação",
+            "Ângulo em graus (positivo: anti-horário):",
+            parent=self.objects_listbox,
+        )
         if ang is None:
             return
         # escolher centro: mundo, objeto, arbitrário
@@ -476,14 +534,20 @@ class GraphicSystem:
         elif choice == "objeto":
             cx, cy = centroid(obj.coordinates)
         elif choice == "arbitrario":
-            cx = simpledialog.askfloat("Centro arbitrário", "cx:", parent=self.objects_listbox)
+            cx = simpledialog.askfloat(
+                "Centro arbitrário", "cx:", parent=self.objects_listbox
+            )
             if cx is None:
                 return
-            cy = simpledialog.askfloat("Centro arbitrário", "cy:", parent=self.objects_listbox)
+            cy = simpledialog.askfloat(
+                "Centro arbitrário", "cy:", parent=self.objects_listbox
+            )
             if cy is None:
                 return
         else:
-            messagebox.showerror("Erro", "Opção inválida. Use 'mundo', 'objeto' ou 'arbitrario'.")
+            messagebox.showerror(
+                "Erro", "Opção inválida. Use 'mundo', 'objeto' ou 'arbitrario'."
+            )
             return
         M = make_rotation(ang, cx, cy)
         apply_transform(M, obj)
@@ -525,7 +589,7 @@ class GraphicSystem:
         # se for polígono e estiver preenchido, atualiza também a cor de preenchimento
         if obj.obj_type == WIREFRAME and getattr(obj, "filled", False):
             obj.fill_color = c  # usa a mesma cor escolhida
-        
+
         self.redraw()
 
     def delete_selected(self):
@@ -544,7 +608,7 @@ class GraphicSystem:
             filename = filedialog.asksaveasfilename(
                 defaultextension=".obj",
                 filetypes=[("Wavefront OBJ", "*.obj")],
-                title="Salvar mundo como .obj"
+                title="Salvar mundo como .obj",
             )
             if not filename:
                 return
@@ -558,13 +622,12 @@ class GraphicSystem:
         with open(filename, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
 
-
     def load_from_obj(self, filename=None):
         if filename is None:
             filename = filedialog.askopenfilename(
                 defaultextension=".obj",
                 filetypes=[("Wavefront OBJ", "*.obj")],
-                title="Abrir mundo .obj"
+                title="Abrir mundo .obj",
             )
             if not filename:
                 return
