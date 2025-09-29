@@ -10,7 +10,7 @@ options_label = {
     POINT: "Ponto",
     LINE: "Linha",
     WIREFRAME: "Wireframe",
-    CURVE: "Curva Bézier",
+    CURVE: "Curva",
 }
 
 

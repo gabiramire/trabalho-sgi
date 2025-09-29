@@ -2,6 +2,7 @@ import math
 import tkinter as tk
 from tkinter import colorchooser, filedialog, messagebox, simpledialog
 
+from .bspline_fd import evaluate_bspline_fd, parse_points
 from .bezier_curve import bezier_curve, bezier_multisegment
 from .clipping import cohen_sutherland, liang_barsky, sutherland_hodgman
 from .obj_descriptor import DescritorOBJ
@@ -339,11 +340,11 @@ class GraphicSystem:
                 if len(obj.coordinates) >= 2:
                     mode = getattr(obj, "curve_mode", "G0")
                     if mode == "G0":
-                        curve_pts = bezier_multisegment(
-                            obj.coordinates, num_samples=200
-                        )
-                    else:  # G1
+                        curve_pts = bezier_multisegment(obj.coordinates, num_samples=200)
+                    elif mode == "G1":
                         curve_pts = bezier_curve(obj.coordinates, num_samples=200)
+                    elif mode == "BS":
+                         curve_pts = evaluate_bspline_fd(obj.coordinates, num_samples=50)
                     for i in range(len(curve_pts) - 1):
                         clipped = self.clip_line(curve_pts[i], curve_pts[i + 1])
                         if clipped:
@@ -370,7 +371,7 @@ class GraphicSystem:
                     x2, y2 = p_coords[i + 1]
                     self.canvas.create_line(x1, y1, x2, y2, dash=(3, 3))
 
-            # Prévia para curva de bézier
+            # Prévia para curva de bézier ou B-Spline
             elif self.current_type == CURVE:
                 # desenhar polígono de controle (linhas guias)
                 if len(p_coords) >= 2:
@@ -388,8 +389,14 @@ class GraphicSystem:
                         curve_pts = bezier_multisegment(
                             self.current_points, num_samples=100
                         )
-                    else:  # G1
+                    elif mode == "G1":  # G1
                         curve_pts = bezier_curve(self.current_points, num_samples=100)
+                    elif mode == "BS":
+                        curve_pts = evaluate_bspline_fd(
+                            self.current_points, num_samples=50
+                        )
+                    else:
+                        curve_pts = []
                     v_coords = [
                         self.viewport.world_to_viewport(x, y) for (x, y) in curve_pts
                     ]
@@ -456,6 +463,13 @@ class GraphicSystem:
         self.redraw()
 
     def finalize_curve(self):
+        if self.curve_mode == "BS" and len(self.current_points) < 4:
+            messagebox.showerror(
+                "Erro",
+                "Curvas B-Spline precisam de pelo menos 4 pontos de controle."
+            )
+            self.current_points = []
+            return
         if len(self.current_points) >= 2:
             self.add_object(
                 options_label[CURVE],

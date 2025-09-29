@@ -116,6 +116,14 @@ def create_object_choice(menu_frame, system, canvas):
         command=lambda: system.set_curve_mode(system.curve_mode_var.get()),
     )
 
+    cont_g2 = tk.Radiobutton(
+        menu_frame,
+        text="B-Splines",
+        variable=system.curve_mode_var,
+        value="BS",
+        command=lambda: system.set_curve_mode(system.curve_mode_var.get()),
+    )
+
     def set_type(*args):
         label = type_var.get()
         system.current_type = next(
@@ -123,7 +131,7 @@ def create_object_choice(menu_frame, system, canvas):
         )
         system.current_points = []
 
-        widgets = [btn_poly, btn_fill, btn_curve, cont_g0, cont_g1]
+        widgets = [btn_poly, btn_fill, btn_curve, cont_g0, cont_g1, cont_g2]
         for widget in widgets:
             widget.pack_forget()
 
@@ -134,6 +142,7 @@ def create_object_choice(menu_frame, system, canvas):
             btn_curve.pack(pady=6, fill=tk.X, after=type_menu)
             cont_g0.pack(anchor="w", after=btn_curve)
             cont_g1.pack(anchor="w", after=cont_g0)
+            cont_g2.pack(anchor="w", after=cont_g1)
 
         update_scrollregion()
 
