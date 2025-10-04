@@ -2,18 +2,30 @@ import math
 import tkinter as tk
 from tkinter import colorchooser, filedialog, messagebox, simpledialog
 
-from .bspline_fd import evaluate_bspline_fd, parse_points
 from .bezier_curve import bezier_curve, bezier_multisegment
+from .bspline_fd import evaluate_bspline_fd
 from .clipping import cohen_sutherland, liang_barsky, sutherland_hodgman
 from .obj_descriptor import DescritorOBJ
-from .objects import CURVE, LINE, POINT, WIREFRAME, DisplayFile, Object2D, options_label
+from .objects import (
+    CURVE,
+    LINE,
+    POINT,
+    WIREFRAME,
+    DisplayFile,
+    Object2D,
+    Object3D,
+    options_label,
+)
+from .point3d import Point3D
 from .transform import (
     apply_transform,
     centroid,
+    centroid_3d,
     make_rotation,
     make_scale,
     make_translation,
 )
+from .window3d import Window3D
 
 
 class Window:
@@ -194,6 +206,50 @@ class GraphicSystem:
         # movimentar mundo com o botão direito do mouse
         self.bind_mouse_pan()
 
+        self.camera = Window3D(vrp=(0, 0, 0), vpn=(0, 0, 1), vup=(0, 1, 0))
+
+    def rotate_3d(
+        self, yaw_deg: float = 0.0, pitch_deg: float = 0.0, roll_deg: float = 0.0
+    ):
+        self.camera.rotate_camera(yaw_deg, pitch_deg, roll_deg)
+
+    def create_cube_3d(self, name, initial_point, size):
+        x, y = initial_point
+        xw, yw = self.viewport.viewport_to_world(x, y)
+        z = 0
+
+        half = size / 2.0
+        p = [
+            Point3D(xw - half, yw - half, z - half),
+            Point3D(xw + half, yw - half, z - half),
+            Point3D(xw + half, yw + half, z - half),
+            Point3D(xw - half, yw + half, z - half),
+            Point3D(xw - half, yw - half, z + half),
+            Point3D(xw + half, yw - half, z + half),
+            Point3D(xw + half, yw + half, z + half),
+            Point3D(xw - half, yw + half, z + half),
+        ]
+
+        edges = [
+            (p[0], p[1]),
+            (p[1], p[2]),
+            (p[2], p[3]),
+            (p[3], p[0]),
+            (p[4], p[5]),
+            (p[5], p[6]),
+            (p[6], p[7]),
+            (p[7], p[4]),
+            (p[0], p[4]),
+            (p[1], p[5]),
+            (p[2], p[6]),
+            (p[3], p[7]),
+        ]
+
+        cube = Object3D(name, edges, color=self.default_color)
+        self.display.add(cube)
+        self.redraw()
+        self.refresh_listbox()
+
     def set_objects_listbox(self, listbox: tk.Listbox):
         self.objects_listbox = listbox
         self.refresh_listbox()
@@ -274,12 +330,16 @@ class GraphicSystem:
         else:
             self.zoom(1.1)
 
-    def update_coords_label(self, obj: Object2D = None):
+    def update_coords_label(self, obj: None):
         if not hasattr(self, "coords_label") or self.coords_label is None:
             return
         if obj is None:
             self.coords_label.config(text="(nenhum objeto selecionado)")
             return
+        if isinstance(obj, Object3D):
+            self.coords_label.config(text=f"{obj.name}: (objeto 3D)")
+            return
+
         max_coords = 7
         coords_list = obj.coordinates[:max_coords]
         coords_str = " ".join([f"({x:.2f},{y:.2f})" for x, y in coords_list])
@@ -290,15 +350,26 @@ class GraphicSystem:
     def redraw(self):
         self.canvas.delete("all")
         self.viewport.draw_frame(color="red")
+
         for obj in self.display.objects:
+            # Objetos 3D
+            if isinstance(obj, Object3D):
+                projected_edges = obj.project(self.camera)
+                for (x1, y1), (x2, y2) in projected_edges:
+                    px1, py1 = self.viewport.world_to_viewport(x1, y1)
+                    px2, py2 = self.viewport.world_to_viewport(x2, y2)
+                    self.canvas.create_line(px1, py1, px2, py2, fill=obj.color)
+                continue
+
+            # Objetos 2D
             coords = [
                 self.viewport.world_to_viewport(x, y) for (x, y) in obj.coordinates
             ]
 
             if obj.obj_type == POINT:
-                if not coords:
-                    continue
-                if self.clip_point(obj.coordinates[0][0], obj.coordinates[0][1]):
+                if coords and self.clip_point(
+                    obj.coordinates[0][0], obj.coordinates[0][1]
+                ):
                     x, y = coords[0]
                     self.canvas.create_oval(
                         x - 3, y - 3, x + 3, y + 3, fill=obj.color, outline=obj.color
@@ -322,9 +393,7 @@ class GraphicSystem:
                             for (x, y) in clipped_poly
                         ]
                         if getattr(obj, "filled", False):
-                            flat = []
-                            for x, y in pv:
-                                flat.extend([x, y])
+                            flat = [v for p in pv for v in p]
                             self.canvas.create_polygon(
                                 *flat,
                                 outline=obj.color,
@@ -340,11 +409,16 @@ class GraphicSystem:
                 if len(obj.coordinates) >= 2:
                     mode = getattr(obj, "curve_mode", "G0")
                     if mode == "G0":
-                        curve_pts = bezier_multisegment(obj.coordinates, num_samples=200)
+                        curve_pts = bezier_multisegment(
+                            obj.coordinates, num_samples=200
+                        )
                     elif mode == "G1":
                         curve_pts = bezier_curve(obj.coordinates, num_samples=200)
                     elif mode == "BS":
-                         curve_pts = evaluate_bspline_fd(obj.coordinates, num_samples=50)
+                        curve_pts = evaluate_bspline_fd(obj.coordinates, num_samples=50)
+                    else:
+                        curve_pts = []
+
                     for i in range(len(curve_pts) - 1):
                         clipped = self.clip_line(curve_pts[i], curve_pts[i + 1])
                         if clipped:
@@ -373,7 +447,6 @@ class GraphicSystem:
 
             # Prévia para curva de bézier ou B-Spline
             elif self.current_type == CURVE:
-                # desenhar polígono de controle (linhas guias)
                 if len(p_coords) >= 2:
                     for i in range(len(p_coords) - 1):
                         x1, y1 = p_coords[i]
@@ -382,14 +455,13 @@ class GraphicSystem:
                             x1, y1, x2, y2, dash=(2, 4), fill="gray"
                         )
 
-                # se houver 3+ pontos, desenhar curva prévia
                 if len(self.current_points) >= 3:
                     mode = getattr(self, "curve_mode", "G0")
                     if mode == "G0":
                         curve_pts = bezier_multisegment(
                             self.current_points, num_samples=100
                         )
-                    elif mode == "G1":  # G1
+                    elif mode == "G1":
                         curve_pts = bezier_curve(self.current_points, num_samples=100)
                     elif mode == "BS":
                         curve_pts = evaluate_bspline_fd(
@@ -465,8 +537,7 @@ class GraphicSystem:
     def finalize_curve(self):
         if self.curve_mode == "BS" and len(self.current_points) < 4:
             messagebox.showerror(
-                "Erro",
-                "Curvas B-Spline precisam de pelo menos 4 pontos de controle."
+                "Erro", "Curvas B-Spline precisam de pelo menos 4 pontos de controle."
             )
             self.current_points = []
             return
@@ -479,6 +550,25 @@ class GraphicSystem:
                 curve_mode=self.curve_mode,
             )
         self.current_points = []
+        self.redraw()
+
+    def finalize_wireframe3d(self, name, points: list[tuple[float, float, float]]):
+        if len(points) % 2 != 0:
+            tk.messagebox.showerror(
+                "Erro", "Número de pontos inválido. Cada aresta precisa de 2 pontos."
+            )
+            return
+
+        edges = []
+        for i in range(0, len(points), 2):
+            p1 = Point3D(*points[i])
+            p2 = Point3D(*points[i + 1])
+            edges.append((p1, p2))
+
+        self.object_count += 1
+        obj3d = Object3D(f"{name}_{self.object_count}", edges, color=self.default_color)
+        self.display.add(obj3d)
+        self.refresh_listbox()
         self.redraw()
 
     # =====================
@@ -500,6 +590,13 @@ class GraphicSystem:
         if obj is None:
             messagebox.showinfo("Aviso", "Selecione um objeto na lista.")
             return
+
+        if isinstance(obj, Object3D):
+            self.translate_3d_selected(obj)
+            self.redraw()
+            self.refresh_listbox()
+            return
+
         tx = simpledialog.askfloat("Translação", "tx:", parent=self.objects_listbox)
         if tx is None:
             return
@@ -512,10 +609,30 @@ class GraphicSystem:
         self.refresh_listbox()
         self.update_coords_label(obj)
 
+    def translate_3d_selected(self, obj):
+        tx = simpledialog.askfloat("Translação 3D", "tx:", parent=self.objects_listbox)
+        if tx is None:
+            return
+        ty = simpledialog.askfloat("Translação 3D", "ty:", parent=self.objects_listbox)
+        if ty is None:
+            return
+        tz = simpledialog.askfloat("Translação 3D", "tz:", parent=self.objects_listbox)
+        if tz is None:
+            return
+        for edge in obj.edges:
+            for p in edge:
+                p.translate(tx, ty, tz)
+
     def scale_selected(self):
         obj = self.get_selected_object()
         if obj is None:
             messagebox.showinfo("Aviso", "Selecione um objeto na lista.")
+            return
+
+        if isinstance(obj, Object3D):
+            self.scale_3d_selected(obj)
+            self.redraw()
+            self.refresh_listbox()
             return
 
         sx = simpledialog.askfloat("Escalonamento", "sx:", parent=self.objects_listbox)
@@ -563,6 +680,78 @@ class GraphicSystem:
         self.redraw()
         self.refresh_listbox()
         self.update_coords_label(obj)
+
+    def scale_3d_selected(self, obj):
+        sx = simpledialog.askfloat(
+            "Escalonamento 3D", "sx:", parent=self.objects_listbox
+        )
+        if sx is None:
+            return
+
+        sy_str = simpledialog.askstring(
+            "Escalonamento 3D",
+            "sy (deixe vazio para usar sx):",
+            parent=self.objects_listbox,
+        )
+        if sy_str is None:
+            return
+        elif sy_str.strip() == "":
+            sy = None
+        else:
+            try:
+                sy = float(sy_str)
+            except ValueError:
+                messagebox.showerror("Erro", "Valor inválido para sy.")
+                return
+
+        sz_str = simpledialog.askstring(
+            "Escalonamento 3D",
+            "sz (deixe vazio para usar sx):",
+            parent=self.objects_listbox,
+        )
+        if sz_str is None:
+            return
+        elif sz_str.strip() == "":
+            sz = None
+        else:
+            try:
+                sz = float(sz_str)
+            except ValueError:
+                messagebox.showerror("Erro", "Valor inválido para sz.")
+                return
+
+        if sy is None:
+            sy = sx
+        if sz is None:
+            sz = sx
+
+        # centro: por padrão centro do objeto (escalonamento "natural")
+        center_choice = messagebox.askyesno(
+            "Centro",
+            "Usar centro do objeto como centro do escalonamento?\n(Yes = centro do objeto, No = escolher ponto arbitrário)",
+        )
+        if center_choice:
+            cx, cy, cz = centroid_3d(obj)
+        else:
+            cx = simpledialog.askfloat(
+                "Centro arbitrário", "cx:", parent=self.objects_listbox
+            )
+            if cx is None:
+                return
+            cy = simpledialog.askfloat(
+                "Centro arbitrário", "cy:", parent=self.objects_listbox
+            )
+            if cy is None:
+                return
+            cz = simpledialog.askfloat(
+                "Centro arbitrário", "cz:", parent=self.objects_listbox
+            )
+            if cz is None:
+                return
+
+        for edge in obj.edges:
+            for p in edge:
+                p.scale(sx, sy, sz, cx, cy, cz)
 
     def choose_rotation_center(self, parent):
         result = {"choice": None}
@@ -614,6 +803,13 @@ class GraphicSystem:
         if choice is None:
             return
         choice = choice.strip().lower()
+
+        if isinstance(obj, Object3D):
+            self.rotate_3d_selected(obj, ang, choice)
+            self.redraw()
+            self.refresh_listbox()
+            return
+
         if choice == "mundo":
             cx, cy = 0.0, 0.0
         elif choice == "objeto":
@@ -640,21 +836,41 @@ class GraphicSystem:
         self.refresh_listbox()
         self.update_coords_label(obj)
 
-    def _rotate_point(self, x, y, angle_deg, cx, cy):
-        ang = math.radians(angle_deg)
-        cosA, sinA = math.cos(ang), math.sin(ang)
-        xr = (x - cx) * cosA - (y - cy) * sinA + cx
-        yr = (x - cx) * sinA + (y - cy) * cosA + cy
-        return xr, yr
+    def rotate_3d_selected(self, obj, ang, center_choice):
+        if center_choice == "mundo":
+            cx, cy, cz = self._window_center_3d()
+        elif center_choice == "objeto":
+            cx, cy, cz = centroid_3d(obj)
+        elif center_choice == "arbitrario":
+            cx = simpledialog.askfloat(
+                "Centro arbitrário", "cx:", parent=self.objects_listbox
+            )
+            if cx is None:
+                return
+            cy = simpledialog.askfloat(
+                "Centro arbitrário", "cy:", parent=self.objects_listbox
+            )
+            if cy is None:
+                return
+            cz = simpledialog.askfloat(
+                "Centro arbitrário", "cz:", parent=self.objects_listbox
+            )
+            if cz is None:
+                return
+        else:
+            messagebox.showerror(
+                "Erro", "Opção inválida. Use 'mundo', 'objeto' ou 'arbitrario'."
+            )
+            return
+        obj.rotate(ang, cx, cy, cz)
+        self.redraw()
+        self.refresh_listbox()
 
-    def _inv_rotate_point(self, x, y, angle_deg, cx, cy):
-        # inversa: ângulo negativo
-        return self._rotate_point(x, y, -angle_deg, cx, cy)
-
-    def _window_center(self):
+    def _window_center_3d(self):
         cx = (self.window.x_min + self.window.x_max) / 2.0
         cy = (self.window.y_min + self.window.y_max) / 2.0
-        return cx, cy
+        cz = 0.0
+        return cx, cy, cz
 
     def set_default_color(self):
         c = colorchooser.askcolor(title="Escolher cor padrão")[1]
@@ -671,9 +887,10 @@ class GraphicSystem:
             return
         obj.color = c
 
-        # se for polígono e estiver preenchido, atualiza também a cor de preenchimento
-        if obj.obj_type == WIREFRAME and getattr(obj, "filled", False):
-            obj.fill_color = c  # usa a mesma cor escolhida
+        if not isinstance(obj, Object3D):
+            # se for polígono e estiver preenchido, atualiza também a cor de preenchimento
+            if obj.obj_type == WIREFRAME and getattr(obj, "filled", False):
+                obj.fill_color = c  # usa a mesma cor escolhida
 
         self.redraw()
 

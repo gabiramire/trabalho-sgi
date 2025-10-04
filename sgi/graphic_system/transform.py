@@ -1,17 +1,18 @@
 import math
-from .objects import Object2D
 from typing import List, Tuple
+
+from .objects import Object2D, Object3D
 
 
 def mat_mult(A, B):
-    """Multiplica duas matrizes 3x3 A*B"""
+    # Multiplica duas matrizes 3x3 A*B
     return [
         [sum(A[i][k] * B[k][j] for k in range(3)) for j in range(3)] for i in range(3)
     ]
 
 
 def apply_transform(matrix, obj: Object2D):
-    """Aplica matrix (3x3) a todas as coordenadas do objeto, alterando-o in-place."""
+    # Aplica matrix (3x3) a todas as coordenadas do objeto, alterando-o in-place.
     new_coords = []
     for x, y in obj.coordinates:
         vx = matrix[0][0] * x + matrix[0][1] * y + matrix[0][2] * 1
@@ -52,3 +53,14 @@ def centroid(coords: List[Tuple[float, float]]):
     xs = [p[0] for p in coords]
     ys = [p[1] for p in coords]
     return sum(xs) / len(xs), sum(ys) / len(ys)
+
+
+def centroid_3d(obj: Object3D):
+    if not obj.edges:
+        return 0.0, 0.0, 0.0
+    xs, ys, zs = [], [], []
+    for p1, p2 in obj.edges:
+        xs.extend([p1.x, p2.x])
+        ys.extend([p1.y, p2.y])
+        zs.extend([p1.z, p2.z])
+    return sum(xs) / len(xs), sum(ys) / len(ys), sum(zs) / len(zs)

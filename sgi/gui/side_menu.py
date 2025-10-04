@@ -1,6 +1,6 @@
 import tkinter as tk
 
-from graphic_system.objects import CURVE, POINT, WIREFRAME, options_label
+from graphic_system.objects import CURVE, OBJECT3D, POINT, WIREFRAME, options_label
 
 
 def create_side_menu(root, main_frame, system):
@@ -61,6 +61,7 @@ def create_side_menu(root, main_frame, system):
     list_objects_listbox(menu_frame, system)
     create_transform_frame(menu_frame, system, main_frame)
     create_window_controls(menu_frame, system)
+    create_window3d_controls(menu_frame, system)
     create_clipping_controls(menu_frame, system)
 
     # Atalhos úteis
@@ -124,6 +125,18 @@ def create_object_choice(menu_frame, system, canvas):
         command=lambda: system.set_curve_mode(system.curve_mode_var.get()),
     )
 
+    btn_wireframe3d = tk.Button(
+        menu_frame,
+        text="Criar Wireframe 3D",
+        command=lambda: create_wireframe3d_dialog(menu_frame, system),
+    )
+
+    btn_createcube3d = tk.Button(
+        menu_frame,
+        text="Criar Cubo 3D",
+        command=lambda: create_cube3d_dialog(menu_frame, system),
+    )
+
     def set_type(*args):
         label = type_var.get()
         system.current_type = next(
@@ -131,7 +144,16 @@ def create_object_choice(menu_frame, system, canvas):
         )
         system.current_points = []
 
-        widgets = [btn_poly, btn_fill, btn_curve, cont_g0, cont_g1, cont_g2]
+        widgets = [
+            btn_poly,
+            btn_fill,
+            btn_curve,
+            cont_g0,
+            cont_g1,
+            cont_g2,
+            btn_wireframe3d,
+            btn_createcube3d,
+        ]
         for widget in widgets:
             widget.pack_forget()
 
@@ -143,11 +165,143 @@ def create_object_choice(menu_frame, system, canvas):
             cont_g0.pack(anchor="w", after=btn_curve)
             cont_g1.pack(anchor="w", after=cont_g0)
             cont_g2.pack(anchor="w", after=cont_g1)
+        elif system.current_type == OBJECT3D:
+            btn_wireframe3d.pack(pady=6, fill=tk.X, after=type_menu)
+            btn_createcube3d.pack(pady=6, fill=tk.X, after=type_menu)
 
         update_scrollregion()
 
     type_var.trace("w", set_type)
     set_type()
+
+
+def create_cube3d_dialog(menu_frame, system):
+    dialog = tk.Toplevel(menu_frame)
+    dialog.title("Criar Cubo 3D")
+
+    tk.Label(dialog, text="Nome do objeto:").grid(row=0, column=0, padx=5, pady=5)
+    entry_name = tk.Entry(dialog)
+    entry_name.grid(row=0, column=1, padx=5, pady=5)
+
+    tk.Label(dialog, text="Ponto inicial (x,y):").grid(row=1, column=0, padx=5, pady=5)
+    entry_point = tk.Entry(dialog)
+    entry_point.grid(row=1, column=1, padx=5, pady=5)
+
+    tk.Label(dialog, text="Tamanho do cubo:").grid(row=2, column=0, padx=5, pady=5)
+    entry_size = tk.Entry(dialog)
+    entry_size.grid(row=2, column=1, padx=5, pady=5)
+
+    def create_cube3d():
+        name = entry_name.get().strip()
+        size = entry_size.get().strip()
+
+        try:
+            x, y = map(float, entry_point.get().strip().split(","))
+        except ValueError:
+            tk.messagebox.showerror(
+                "Erro",
+                "Ponto inicial inválido. Use o formato x,y com valores numéricos.",
+            )
+            return
+
+        if not name:
+            tk.messagebox.showerror("Erro", "Nome do objeto não pode ser vazio.")
+            return
+
+        if not size:
+            tk.messagebox.showerror("Erro", "Tamanho do cubo não pode ser vazio.")
+            return
+
+        system.create_cube_3d(name, (x, y), float(size))
+        dialog.destroy()
+
+    btn_create = tk.Button(dialog, text="Criar", command=create_cube3d)
+    btn_create.grid(row=3, column=0, columnspan=2, pady=10)
+
+
+def create_wireframe3d_dialog(menu_frame, system):
+    dialog = tk.Toplevel(menu_frame)
+    dialog.title("Criar Wireframe 3D")
+
+    tk.Label(dialog, text="Nome do objeto:").grid(row=0, column=0, padx=5, pady=5)
+    entry_name = tk.Entry(dialog)
+    entry_name.grid(row=0, column=1, padx=5, pady=5)
+
+    tk.Label(dialog, text="Número de arestas:").grid(row=1, column=0, padx=5, pady=5)
+    entry_edges = tk.Entry(dialog)
+    entry_edges.grid(row=1, column=1, padx=5, pady=5)
+
+    def create_wireframe3d():
+        name = entry_name.get().strip()
+        try:
+            num_edges = int(entry_edges.get().strip())
+            if num_edges <= 0:
+                raise ValueError
+        except ValueError:
+            tk.messagebox.showerror(
+                "Erro", "Número de arestas deve ser um inteiro positivo."
+            )
+            return
+
+        if not name:
+            tk.messagebox.showerror("Erro", "Nome do objeto não pode ser vazio.")
+            return
+
+        start_wireframe3d(name, num_edges, menu_frame, system)
+        dialog.destroy()
+
+    btn_create = tk.Button(dialog, text="Criar", command=create_wireframe3d)
+    btn_create.grid(row=2, column=0, columnspan=2, pady=10)
+
+
+def start_wireframe3d(name, num_edges, menu_frame, system):
+    dialog = tk.Toplevel(menu_frame)
+    dialog.title("Definir Arestas do Wireframe 3D")
+    points = []
+    entries = []
+    total_points = num_edges * 2
+    tk.Label(
+        dialog,
+        text=f"Defina as coordenadas dos {total_points} pontos (x,y,z) para as {num_edges} arestas:",
+    ).pack(padx=5, pady=5)
+    frame_entries = tk.Frame(dialog)
+    frame_entries.pack(padx=5, pady=5)
+    canvas = tk.Canvas(frame_entries)
+    scrollbar = tk.Scrollbar(frame_entries, orient="vertical", command=canvas.yview)
+    scrollable_frame = tk.Frame(canvas)
+    scrollable_frame.bind(
+        "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+    )
+    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+    for i in range(total_points):
+        lbl = tk.Label(scrollable_frame, text=f"Ponto {i+1} (x,y,z):")
+        lbl.grid(row=i, column=0, padx=2, pady=2)
+        entry = tk.Entry(scrollable_frame, width=20)
+        entry.grid(row=i, column=1, padx=2, pady=2)
+        entries.append(entry)
+
+    def submit_points():
+        for i, entry in enumerate(entries):
+            try:
+                x, y, z = map(float, entry.get().strip().split(","))
+                points.append((x, y, z))
+            except ValueError:
+                tk.messagebox.showerror(
+                    "Erro",
+                    f"Coordenadas inválidas para o ponto {i+1}. Use o formato x,y,z com valores numéricos.",
+                )
+                return
+        if len(points) != total_points:
+            tk.messagebox.showerror("Erro", f"Defina exatamente {total_points} pontos.")
+            return
+        system.finalize_wireframe3d(name, points)
+        dialog.destroy()
+
+    btn_submit = tk.Button(dialog, text="Criar Wireframe 3D", command=submit_points)
+    btn_submit.pack(pady=10)
 
 
 def create_default_color(menu_frame, system):
@@ -264,6 +418,93 @@ def create_window_controls(menu_frame, system):
         command=lambda: (system.window.rotate(-5), system.redraw()),
     )
     btn_rotate_right.pack(side=tk.LEFT, padx=2)
+
+
+def create_window3d_controls(menu_frame, system):
+    window3d_frame = tk.LabelFrame(
+        menu_frame, text="Window 3D", font=("Arial", 11, "bold"), padx=5, pady=5
+    )
+    window3d_frame.pack(fill=tk.X, padx=10, pady=8)
+
+    nav_frame = tk.Frame(window3d_frame)
+    nav_frame.pack(pady=5)
+
+    btn_up = tk.Button(nav_frame, text="▲", width=4, command=lambda: system.move(0, 10))
+    btn_up.grid(row=0, column=1, padx=2, pady=2)
+
+    btn_left = tk.Button(
+        nav_frame, text="◀", width=4, command=lambda: system.move(-10, 0)
+    )
+    btn_left.grid(row=1, column=0, padx=2, pady=2)
+
+    btn_right = tk.Button(
+        nav_frame, text="▶", width=4, command=lambda: system.move(10, 0)
+    )
+    btn_right.grid(row=1, column=2, padx=2, pady=2)
+
+    btn_down = tk.Button(
+        nav_frame, text="▼", width=4, command=lambda: system.move(0, -10)
+    )
+    btn_down.grid(row=2, column=1, padx=2, pady=2)
+
+    zoom_frame = tk.Frame(window3d_frame)
+    zoom_frame.pack(pady=10)
+
+    btn_zoom_in = tk.Button(zoom_frame, text="+", command=lambda: system.zoom(0.9))
+    btn_zoom_in.pack(side=tk.LEFT, padx=5)
+
+    btn_zoom_out = tk.Button(zoom_frame, text="-", command=lambda: system.zoom(1.1))
+    btn_zoom_out.pack(side=tk.LEFT, padx=5)
+
+    rotate_frame = tk.Frame(window3d_frame)
+    rotate_frame.pack(pady=5, fill=tk.X)
+
+    tk.Label(rotate_frame, text="Rotação (5°):").pack(side=tk.LEFT)
+    btn_rotate_left = tk.Button(
+        rotate_frame,
+        text="⟲",
+        command=lambda: (system.window.rotate(5), system.redraw()),
+    )
+    btn_rotate_left.pack(side=tk.LEFT, padx=2)
+    btn_rotate_right = tk.Button(
+        rotate_frame,
+        text="⟳",
+        command=lambda: (system.window.rotate(-5), system.redraw()),
+    )
+    btn_rotate_right.pack(side=tk.LEFT, padx=2)
+
+    rotate_3d_frame = tk.Frame(window3d_frame)
+    rotate_3d_frame.pack(pady=5, fill=tk.X, padx=5)
+
+    tk.Label(rotate_3d_frame, text="Rotação 3D").grid(row=0, column=0, columnspan=4)
+    btn_rotate_3d_up = tk.Button(
+        rotate_3d_frame,
+        width=4,
+        text="▲",
+        command=lambda: (system.rotate_3d(pitch_deg=5), system.redraw()),
+    )
+    btn_rotate_3d_up.grid(row=1, column=1, padx=2, pady=2)
+    btn_rotate_3d_left = tk.Button(
+        rotate_3d_frame,
+        width=4,
+        text="◀",
+        command=lambda: (system.rotate_3d(yaw_deg=5), system.redraw()),
+    )
+    btn_rotate_3d_left.grid(row=2, column=0, padx=2, pady=2)
+    btn_rotate_3d_right = tk.Button(
+        rotate_3d_frame,
+        width=4,
+        text="▶",
+        command=lambda: (system.rotate_3d(yaw_deg=-5), system.redraw()),
+    )
+    btn_rotate_3d_right.grid(row=2, column=3, padx=2, pady=2)
+    btn_rotate_3d_down = tk.Button(
+        rotate_3d_frame,
+        width=4,
+        text="▼",
+        command=lambda: (system.rotate_3d(pitch_deg=-5), system.redraw()),
+    )
+    btn_rotate_3d_down.grid(row=3, column=1, padx=2, pady=2)
 
 
 # Seleção do algoritmo de clipping

@@ -7,7 +7,7 @@ from gui.side_menu import create_side_menu
 
 def main():
     root = tk.Tk()
-    root.title("Computação Gráfica - Sistema Gráfico Interativo (Transformações 2D)")
+    root.title("Computação Gráfica - Sistema Gráfico Interativo")
 
     # Frame principal (Canvas)
     main_frame = tk.Frame(root)

@@ -1,5 +1,3 @@
-import math
-
 def evaluate_bspline_fd(points, num_samples=50):
     """
     Avalia uma B-Spline cúbica usando Forward Differences.
