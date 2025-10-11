@@ -195,6 +195,19 @@ class Object3D:
         for p1, p2 in self.edges:
             p1v = self._apply_matrix(p1, view_matrix)
             p2v = self._apply_matrix(p2, view_matrix)
+            if camera.projection_mode == "perspective":
+                d = camera.d
+                p1v = (
+                    (d * p1v[0]) / (p1v[2] + d),
+                    (d * p1v[1]) / (p1v[2] + d),
+                    p1v[2],
+                )
+                p2v = (
+                    (d * p2v[0]) / (p2v[2] + d),
+                    (d * p2v[1]) / (p2v[2] + d),
+                    p2v[2],
+                )
+
             projected_edges.append(((p1v[0], p1v[1]), (p2v[0], p2v[1])))
 
         return projected_edges

@@ -27,6 +27,9 @@ class Window3D:
         self.n = [0.0, 0.0, 1.0]
         self._recompute_uvn()
 
+        self.projection_mode = "perspective"  # ou "parallel"
+        self.d = 500.0  # distância do plano de projeção ao VRP
+
     @staticmethod
     def _normalize(vec):
         x, y, z = vec
@@ -96,3 +99,12 @@ class Window3D:
             self.vup = rotate_vec(self.vup, n_axis, roll_deg)
 
         self._recompute_uvn()
+
+    def toggle_projection(self):
+        if self.projection_mode == "parallel":
+            self.projection_mode = "perspective"
+        else:
+            self.projection_mode = "parallel"
+
+    def change_d(self, delta: float):
+        self.d = max(10.0, self.d + delta)

@@ -426,6 +426,60 @@ def create_window3d_controls(menu_frame, system):
     )
     window3d_frame.pack(fill=tk.X, padx=10, pady=8)
 
+    projection_label = tk.Label(
+        window3d_frame,
+        text=f"Projeção: {"Paralela" if system.camera.projection_mode == 'parallel' else 'Perspectiva'}",
+    )
+    projection_label.pack(pady=4)
+    projection_center = tk.Label(
+        window3d_frame,
+        text=f"Centro de Projeção: {system.camera.d}",
+    )
+    projection_center.pack(pady=4)
+    system.projection_label = projection_label
+    system.projection_center = projection_center
+
+    def update_projection_label():
+        system.projection_label.config(
+            text=f"Projeção: {"Paralela" if system.camera.projection_mode == 'parallel' else 'Perspectiva'}"
+        )
+        system.projection_center.config(text=f"Centro de Projeção: {system.camera.d}")
+
+    change_proj_btn = tk.Button(
+        window3d_frame,
+        text="Alternar Projeção",
+        command=lambda: (
+            system.camera.toggle_projection(),
+            update_projection_label(),
+            system.redraw(),
+        ),
+    )
+    change_proj_btn.pack(pady=4, fill=tk.X)
+
+    change_d_frame = tk.Frame(window3d_frame)
+    change_d_frame.pack(pady=4, fill=tk.X)
+    tk.Label(change_d_frame, text="Centro de Projeção:").pack(side=tk.LEFT)
+    btn_decrease_d = tk.Button(
+        change_d_frame,
+        text="-",
+        command=lambda: (
+            system.camera.change_d(-10),
+            update_projection_label(),
+            system.redraw(),
+        ),
+    )
+    btn_decrease_d.pack(side=tk.LEFT, padx=5)
+    btn_increase_d = tk.Button(
+        change_d_frame,
+        text="+",
+        command=lambda: (
+            system.camera.change_d(10),
+            update_projection_label(),
+            system.redraw(),
+        ),
+    )
+    btn_increase_d.pack(side=tk.LEFT, padx=5)
+
     nav_frame = tk.Frame(window3d_frame)
     nav_frame.pack(pady=5)
 
