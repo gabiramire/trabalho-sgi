@@ -20,9 +20,9 @@ options_label = {
 }
 
 
-# =====================
-# Display File / Objetos
-# =====================
+# ==========================
+# = Display File / Objetos =
+# ==========================
 class Object2D:
     def __init__(
         self,
@@ -52,13 +52,14 @@ class Object2D:
 
 class Object3D:
     def __init__(
-        self, name: str, edges: List[Tuple[Point3D, Point3D]], color: str = "#000000"
+        self, name: str, edges: List[Tuple[Point3D, Point3D]], color: str = "#000000",
     ):
         self.name = name
         self.edges = edges  # list of (Point3D, Point3D)
         self.color = color
+        self.type = OBJECT3D
 
-    def __repr__(self):
+    def __repr__(self): 
         return f"Object3D({self.name}, edges={len(self.edges)})"
 
     def _unique_points(self):

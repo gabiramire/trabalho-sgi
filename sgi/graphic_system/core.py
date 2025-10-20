@@ -1053,7 +1053,7 @@ class GraphicSystem:
         with open(filename, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
-        objects = DescritorOBJ.import_objects(lines)
+        objects = objects = DescritorOBJ.import_all(lines, color_3d=self.default_color)
 
         for obj in objects:
             self.display.add(obj)
