@@ -4,6 +4,7 @@ from tkinter import colorchooser, filedialog, messagebox, simpledialog
 
 from .bezier_curve import bezier_curve, bezier_multisegment
 from .bspline_fd import evaluate_bspline_fd
+from .bezier_surface import generate_surface_grid
 from .clipping import cohen_sutherland, liang_barsky, sutherland_hodgman, clip_point
 from .obj_descriptor import DescritorOBJ
 from .objects import (
@@ -11,6 +12,7 @@ from .objects import (
     LINE,
     POINT,
     WIREFRAME,
+    SURFACE,
     DisplayFile,
     Object2D,
     Object3D,
@@ -352,14 +354,17 @@ class GraphicSystem:
         for obj in self.display.objects:
             # Objetos 3D
             if isinstance(obj, Object3D):
+                if obj.type == SURFACE:
+                    self._draw_surface_object(obj)
+                    continue
+
                 projected_edges = obj.project(self.camera)
                 for (x1, y1), (x2, y2) in projected_edges:
                     # clipping 2D para objetos 3D
                     self._draw_clipped_world_segment(x1, y1, x2, y2, obj.color)
-                    # px1, py1 = self.viewport.world_to_viewport(x1, y1)
-                    # px2, py2 = self.viewport.world_to_viewport(x2, y2)
-                    # self.canvas.create_line(px1, py1, px2, py2, fill=obj.color)
                 continue
+
+            
 
             # Objetos 2D
             coords = [
@@ -403,6 +408,7 @@ class GraphicSystem:
                                 x2, y2 = pv[(i + 1) % len(pv)]
                                 self.canvas.create_line(x1, y1, x2, y2, fill=obj.color)
 
+            # CURVA
             elif obj.obj_type == CURVE:
                 if len(obj.coordinates) >= 2:
                     mode = getattr(obj, "curve_mode", "G0")
