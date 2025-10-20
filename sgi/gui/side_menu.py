@@ -725,7 +725,10 @@ def create_clipping_controls(menu_frame, system):
         command=lambda: system.set_clipping_mode(system.clip_var.get()),
     ).pack(anchor="w")
 
-
+# código gerado por GPT, 
+# prompt: baseado no código importado, preciso implementar uma tela de entrada de dados onde você pode entrar com conjuntos de pontos de controle, 
+# 16 a 16, no mesmo padrão dos outros objetos com as linhas da matriz separadas por ";":
+# -> (x_11,y_11,z_11),(x_12,y_12,z_12),...;(x_21,y_21,z_21),(x_22,y_22,z_22),...;...(x_ij,y_ij,z_ij)
 import re
 from graphic_system.point3d import Point3D
 _POINT_RE = re.compile(

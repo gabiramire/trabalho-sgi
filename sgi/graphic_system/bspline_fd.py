@@ -1,9 +1,5 @@
+# B-Spline cúbica usando Forward Differences
 def evaluate_bspline_fd(points, num_samples=50):
-    """
-    Avalia uma B-Spline cúbica usando Forward Differences.
-    points: lista de (x,y) pontos de controle
-    num_samples: pontos gerados por segmento
-    """
     if len(points) < 4:
         return []
 
