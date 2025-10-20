@@ -9,6 +9,7 @@ LINE = "line"
 WIREFRAME = "wireframe"  # polígono = wireframe
 CURVE = "curve"
 OBJECT3D = "object3d"
+SURFACE = "surface"
 
 options_label = {
     POINT: "Ponto",
@@ -225,6 +226,28 @@ class Object3D:
         vec = [point.x, point.y, point.z, 1]
         res = [sum(matrix[i][j] * vec[j] for j in range(4)) for i in range(4)]
         return res[:3]
+
+# Superfícies Bicúbicas de Beziér
+
+# -> Retalho bicúbico: 16 pontos (4x4) em ordem de linhas
+class BezierPatch(Object3D):
+    def __init__(self, name, control_grid, color="black", nu=10, nv=10):
+        super().__init__(name, SURFACE, color=color)
+        if len(control_grid) != 4 or any(len(row) != 4 for row in control_grid):
+            raise ValueError("BezierPatch requer grade 4x4 de pontos de controle.")
+        self.control = control_grid              # [[Point3D,...]*4]*4
+        self.nu = int(nu)                        # divisões em u
+        self.nv = int(nv)                        # divisões em v
+        self.type = SURFACE
+        self.color = color
+
+# -> Superfície composta por 1+ retalhos
+class BezierSurface(Object3D):
+    def __init__(self, name, patches, color="black"):
+        super().__init__(name, SURFACE, color=color)
+        self.patches = patches                   # List[BezierPatch]
+        self.type = SURFACE
+        self.color = color
 
 
 class DisplayFile:
