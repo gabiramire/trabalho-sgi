@@ -355,6 +355,7 @@ class GraphicSystem:
             # Objetos 3D
             if isinstance(obj, Object3D):
                 if obj.type == SURFACE:
+                    # desenha a malha da superfície
                     self._draw_surface_object(obj)
                     continue
 
@@ -1059,6 +1060,47 @@ class GraphicSystem:
 
         self.refresh_listbox()
         self.redraw()
+
+    # Recebe Point3D OU tupla (x,y,z) e devolve (x2d, y2d) no espaço de MUNDO 2D 
+    def _project3d_to2d_world(self, p3):
+        if hasattr(p3, "x"):
+            x, y, z = p3.x, p3.y, p3.z
+        else:
+            x, y, z = p3
+        x2d, y2d = self.camera.project_point((x, y, z))
+        return (x2d, y2d)
+
+    # Desenha superfície bicúbica como uma malha
+    def _draw_surface_object(self, surface_obj):
+        patches = []
+        if hasattr(surface_obj, "patches") and surface_obj.patches:
+            patches = surface_obj.patches
+        elif hasattr(surface_obj, "control"):
+            patches = [surface_obj]
+        else:
+            return  # nada a desenhar
+
+        for patch in patches:
+            # gera grid para superfície 3d
+            grid3d = generate_surface_grid(patch.control, patch.nu, patch.nv)
+
+            # Projeta todos em 2D (mundo)
+            grid2d = [[self._project3d_to2d_world(p) for p in row] for row in grid3d]
+
+            # Linhas em u (varia i, j fixo)
+            for j in range(len(grid2d[0])):             # nv+1
+                for i in range(len(grid2d) - 1):        # nu
+                    x1, y1 = grid2d[i][j]
+                    x2, y2 = grid2d[i+1][j]
+                    self._draw_clipped_world_segment(x1, y1, x2, y2, surface_obj.color)
+
+            # Linhas em v (varia j, i fixo)
+            for i in range(len(grid2d)):                # nu+1
+                for j in range(len(grid2d[0]) - 1):     # nv
+                    x1, y1 = grid2d[i][j]
+                    x2, y2 = grid2d[i][j+1]
+                    self._draw_clipped_world_segment(x1, y1, x2, y2, surface_obj.color)
+
 
     # ---- Helpers para clipping correto com janela possivelmente rotacionada ----
     def _rotate_point(self, x, y, ang_deg, cx, cy):

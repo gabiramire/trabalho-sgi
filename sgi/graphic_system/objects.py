@@ -238,12 +238,16 @@ class BezierPatch(Object3D):
         self.control = control_grid              # [[Point3D,...]*4]*4
         self.nu = int(nu)                        # divisões em u
         self.nv = int(nv)                        # divisões em v
+        self.type = SURFACE
+        self.color = color
 
 # -> Superfície composta por 1+ retalhos
 class BezierSurface(Object3D):
     def __init__(self, name, patches, color="black"):
         super().__init__(name, SURFACE, color=color)
         self.patches = patches                   # List[BezierPatch]
+        self.type = SURFACE
+        self.color = color
 
 
 class DisplayFile:

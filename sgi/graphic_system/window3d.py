@@ -108,3 +108,32 @@ class Window3D:
 
     def change_d(self, delta: float):
         self.d = max(10.0, self.d + delta)
+
+    # converte ponto do mundo para camera
+    def world_to_camera(self, p: Tuple[float, float, float]):
+        x, y, z = p
+        dx, dy, dz = x - self.vrp[0], y - self.vrp[1], z - self.vrp[2]
+        xc = dx * self.u[0] + dy * self.u[1] + dz * self.u[2]
+        yc = dx * self.v[0] + dy * self.v[1] + dz * self.v[2]
+        zc = dx * self.n[0] + dy * self.n[1] + dz * self.n[2]
+        return xc, yc, zc
+
+    # projeta um Point3D do mundo para 2D (no plano da câmera)
+    def project_point(self, p: Tuple[float, float, float]):
+        xc, yc, zc = self.world_to_camera(p)
+        if self.projection_mode == "parallel":
+            return (xc, yc)
+        denom = (self.d + zc)
+        if abs(denom) < 1e-9:
+            denom = 1e-9  # evita divisão por zero
+        return (self.d * xc / denom, self.d * yc / denom)
+
+    # conveniência: projeta uma lista de Point3D/tuplas para 2D
+    def project_points(self, points3d):
+        out = []
+        for P in points3d:
+            if hasattr(P, "x"):
+                out.append(self.project_point((P.x, P.y, P.z)))
+            else:
+                out.append(self.project_point(P))
+        return out
