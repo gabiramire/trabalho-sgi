@@ -1,6 +1,14 @@
 import tkinter as tk
 
-from graphic_system.objects import CURVE, OBJECT3D, SURFACE, POINT, WIREFRAME, BezierPatch, BezierSurface, options_label
+from graphic_system.objects import (
+    CURVE,
+    OBJECT3D,
+    POINT,
+    WIREFRAME,
+    BezierPatch,
+    BezierSurface,
+    options_label,
+)
 
 
 def create_side_menu(root, main_frame, system):
@@ -9,7 +17,7 @@ def create_side_menu(root, main_frame, system):
     side_frame.pack(side=tk.LEFT, fill=tk.Y)
 
     # Canvas para permitir o scroll
-    canvas = tk.Canvas(side_frame, width=240)
+    canvas = tk.Canvas(side_frame, width=250)
     canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=5, padx=5)
 
     # Scrollbar vertical
@@ -159,7 +167,7 @@ def create_object_choice(menu_frame, system, canvas):
             cont_g2,
             btn_wireframe3d,
             btn_createcube3d,
-            btn_surface3d
+            btn_surface3d,
         ]
         for widget in widgets:
             widget.pack_forget()
@@ -227,7 +235,6 @@ def create_cube3d_dialog(menu_frame, system):
     btn_create.grid(row=3, column=0, columnspan=2, pady=10)
 
 
-
 def create_wireframe3d_dialog(menu_frame, system):
     dialog = tk.Toplevel(menu_frame)
     dialog.title("Criar Wireframe 3D")
@@ -289,12 +296,20 @@ def start_wireframe3d(name, num_edges, menu_frame, system):
 
     # alinha largura do frame interno com o canvas
     canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win_id, width=e.width))
-    scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+    scrollable_frame.bind(
+        "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+    )
 
     # ===== Cabeçalho (AGORA NO MESMO GRID DO CONTEÚDO) =====
-    tk.Label(scrollable_frame, text="#", width=4, anchor="center", bg="white").grid(row=0, column=0, padx=2, pady=(0, 6))
-    tk.Label(scrollable_frame, text="Vértice 1 (x,y,z)", anchor="w", bg="white").grid(row=0, column=1, padx=2, pady=(0, 6), sticky="w")
-    tk.Label(scrollable_frame, text="Vértice 2 (x,y,z)", anchor="w", bg="white").grid(row=0, column=2, padx=2, pady=(0, 6), sticky="w")
+    tk.Label(scrollable_frame, text="#", width=4, anchor="center", bg="white").grid(
+        row=0, column=0, padx=2, pady=(0, 6)
+    )
+    tk.Label(scrollable_frame, text="Vértice 1 (x,y,z)", anchor="w", bg="white").grid(
+        row=0, column=1, padx=2, pady=(0, 6), sticky="w"
+    )
+    tk.Label(scrollable_frame, text="Vértice 2 (x,y,z)", anchor="w", bg="white").grid(
+        row=0, column=2, padx=2, pady=(0, 6), sticky="w"
+    )
 
     # pesos das colunas p/ expandirem corretamente
     scrollable_frame.grid_columnconfigure(1, weight=1)
@@ -304,9 +319,9 @@ def start_wireframe3d(name, num_edges, menu_frame, system):
     edge_entries = []
     for i in range(num_edges):
         row = i + 1
-        tk.Label(scrollable_frame, text=f"{i+1}", width=4, anchor="center", bg="white").grid(
-            row=row, column=0, padx=2, pady=2
-        )
+        tk.Label(
+            scrollable_frame, text=f"{i+1}", width=4, anchor="center", bg="white"
+        ).grid(row=row, column=0, padx=2, pady=2)
 
         e1 = tk.Entry(scrollable_frame)
         e2 = tk.Entry(scrollable_frame)
@@ -361,33 +376,49 @@ def create_surface3d_dialog(menu_frame, system):
     dialog.title("Superfície Bézier 3D (4x4 por patch)")
 
     # --- Nome
-    tk.Label(dialog, text="Nome do objeto:").grid(row=0, column=0, sticky="w", padx=6, pady=6)
+    tk.Label(dialog, text="Nome do objeto:").grid(
+        row=0, column=0, sticky="w", padx=6, pady=6
+    )
     entry_name = tk.Entry(dialog, width=28)
     entry_name.insert(0, "BezierSurface")
     entry_name.grid(row=0, column=1, sticky="we", padx=6, pady=6)
 
     # --- nu, nv
-    tk.Label(dialog, text="Divisões nu × nv:").grid(row=1, column=0, sticky="w", padx=6, pady=6)
+    tk.Label(dialog, text="Divisões nu × nv:").grid(
+        row=1, column=0, sticky="w", padx=6, pady=6
+    )
     frame_n = tk.Frame(dialog)
     frame_n.grid(row=1, column=1, sticky="w", padx=6, pady=6)
-    entry_nu = tk.Entry(frame_n, width=6); entry_nu.insert(0, "12")
+    entry_nu = tk.Entry(frame_n, width=6)
+    entry_nu.insert(0, "12")
     tk.Label(frame_n, text="×").pack(side=tk.LEFT, padx=4)
-    entry_nv = tk.Entry(frame_n, width=6); entry_nv.insert(0, "12")
-    entry_nu.pack(side=tk.LEFT); entry_nv.pack(side=tk.LEFT)
+    entry_nv = tk.Entry(frame_n, width=6)
+    entry_nv.insert(0, "12")
+    entry_nu.pack(side=tk.LEFT)
+    entry_nv.pack(side=tk.LEFT)
 
     # --- Cor
     color_var = tk.StringVar(value=system.default_color)
+
     def choose_color():
         c = tk.colorchooser.askcolor(title="Cor da superfície")[1]
-        if c: color_var.set(c)
+        if c:
+            color_var.set(c)
+
     tk.Label(dialog, text="Cor:").grid(row=2, column=0, sticky="w", padx=6, pady=6)
-    frame_color = tk.Frame(dialog); frame_color.grid(row=2, column=1, sticky="w", padx=6, pady=6)
+    frame_color = tk.Frame(dialog)
+    frame_color.grid(row=2, column=1, sticky="w", padx=6, pady=6)
     tk.Entry(frame_color, textvariable=color_var, width=14).pack(side=tk.LEFT)
-    tk.Button(frame_color, text="Escolher…", command=choose_color).pack(side=tk.LEFT, padx=6)
+    tk.Button(frame_color, text="Escolher…", command=choose_color).pack(
+        side=tk.LEFT, padx=6
+    )
 
     # --- Texto dos patches
-    tk.Label(dialog, text="Pontos de controle (4x4 por patch; linhas separadas por ';').\n"
-                          "Para múltiplos patches, separe por uma linha em branco.").grid(row=3, column=0, columnspan=2, sticky="w", padx=6, pady=(6,2))
+    tk.Label(
+        dialog,
+        text="Pontos de controle (4x4 por patch; linhas separadas por ';').\n"
+        "Para múltiplos patches, separe por uma linha em branco.",
+    ).grid(row=3, column=0, columnspan=2, sticky="w", padx=6, pady=(6, 2))
 
     txt = tk.Text(dialog, width=64, height=14)
     txt.grid(row=4, column=0, columnspan=2, sticky="nsew", padx=6, pady=6)
@@ -413,16 +444,25 @@ def create_surface3d_dialog(menu_frame, system):
             nu = max(1, int(entry_nu.get().strip()))
             nv = max(1, int(entry_nv.get().strip()))
         except Exception:
-            tk.messagebox.showerror("Erro", "nu e nv devem ser inteiros ≥ 1.", parent=dialog); return
+            tk.messagebox.showerror(
+                "Erro", "nu e nv devem ser inteiros ≥ 1.", parent=dialog
+            )
+            return
 
         raw = txt.get("1.0", "end").strip()
         if not raw:
-            tk.messagebox.showerror("Erro", "Informe os pontos de controle.", parent=dialog); return
+            tk.messagebox.showerror(
+                "Erro", "Informe os pontos de controle.", parent=dialog
+            )
+            return
 
         control_patches = _fallback_parse_multiple_patches(raw)
 
         if not control_patches:
-            tk.messagebox.showerror("Erro", "Nenhum patch 4x4 válido encontrado.", parent=dialog); return
+            tk.messagebox.showerror(
+                "Erro", "Nenhum patch 4x4 válido encontrado.", parent=dialog
+            )
+            return
 
         try:
             patches = [
@@ -431,16 +471,22 @@ def create_surface3d_dialog(menu_frame, system):
             ]
             surf = BezierSurface(name, patches, color=color_var.get())
         except Exception as e:
-            tk.messagebox.showerror("Erro", f"Falha ao criar superfície:\n{e}", parent=dialog); return
+            tk.messagebox.showerror(
+                "Erro", f"Falha ao criar superfície:\n{e}", parent=dialog
+            )
+            return
 
         system.display.add(surf)
         system.refresh_listbox()
         system.redraw()
         dialog.destroy()
 
-    btns = tk.Frame(dialog); btns.grid(row=5, column=0, columnspan=2, pady=8)
+    btns = tk.Frame(dialog)
+    btns.grid(row=5, column=0, columnspan=2, pady=8)
     tk.Button(btns, text="Cancelar", command=dialog.destroy).pack(side=tk.LEFT, padx=6)
-    tk.Button(btns, text="Criar Superfície", command=on_create).pack(side=tk.LEFT, padx=6)
+    tk.Button(btns, text="Criar Superfície", command=on_create).pack(
+        side=tk.LEFT, padx=6
+    )
     dialog.bind("<Return>", lambda *_: on_create())
 
 
@@ -725,15 +771,19 @@ def create_clipping_controls(menu_frame, system):
         command=lambda: system.set_clipping_mode(system.clip_var.get()),
     ).pack(anchor="w")
 
-# código gerado por GPT, 
-# prompt: baseado no código importado, preciso implementar uma tela de entrada de dados onde você pode entrar com conjuntos de pontos de controle, 
+
+# código gerado por GPT,
+# prompt: baseado no código importado, preciso implementar uma tela de entrada de dados onde você pode entrar com conjuntos de pontos de controle,
 # 16 a 16, no mesmo padrão dos outros objetos com as linhas da matriz separadas por ";":
 # -> (x_11,y_11,z_11),(x_12,y_12,z_12),...;(x_21,y_21,z_21),(x_22,y_22,z_22),...;...(x_ij,y_ij,z_ij)
 import re
+
 from graphic_system.point3d import Point3D
+
 _POINT_RE = re.compile(
     r"\(\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*,\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*,\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*\)"
 )
+
 
 def _fallback_parse_patch_4x4(text):
     rows = [r.strip() for r in text.strip().split(";") if r.strip()]
@@ -744,8 +794,9 @@ def _fallback_parse_patch_4x4(text):
         pts = _POINT_RE.findall(r)
         if len(pts) != 4:
             raise ValueError("Cada linha deve ter 4 pontos (x,y,z).")
-        grid.append([Point3D(float(x), float(y), float(z)) for (x,y,z) in pts])
+        grid.append([Point3D(float(x), float(y), float(z)) for (x, y, z) in pts])
     return grid
+
 
 def _fallback_parse_multiple_patches(text_block):
     chunks = [c for c in re.split(r"\n\s*\n", text_block.strip()) if c.strip()]

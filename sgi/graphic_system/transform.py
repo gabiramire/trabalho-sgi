@@ -1,7 +1,6 @@
 import math
-from typing import List, Tuple
 
-from .objects import Object2D, Object3D
+from .objects import Object2D
 
 
 def mat_mult(A, B):

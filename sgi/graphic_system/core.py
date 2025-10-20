@@ -3,16 +3,16 @@ import tkinter as tk
 from tkinter import colorchooser, filedialog, messagebox, simpledialog
 
 from .bezier_curve import bezier_curve, bezier_multisegment
-from .bspline_fd import evaluate_bspline_fd
 from .bezier_surface import generate_surface_grid
-from .clipping import cohen_sutherland, liang_barsky, sutherland_hodgman, clip_point
+from .bspline_fd import evaluate_bspline_fd
+from .clipping import clip_point, cohen_sutherland, liang_barsky, sutherland_hodgman
 from .obj_descriptor import DescritorOBJ
 from .objects import (
     CURVE,
     LINE,
     POINT,
-    WIREFRAME,
     SURFACE,
+    WIREFRAME,
     DisplayFile,
     Object2D,
     Object3D,
@@ -75,8 +75,8 @@ class Viewport:
         h = max(self.canvas.winfo_height(), 1)
 
         # retângulo FIXO da viewport (margens em px)
-        self.px1 = max(w - 40, self.px0 + 1)
-        self.py1 = max(h - 30, self.py0 + 1)
+        self.px1 = max(w - 20, self.px0 + 1)
+        self.py1 = max(h - 20, self.py0 + 1)
 
         # >>> CASAR ASPECTO DA WINDOW COM A VIEWPORT INTERNA <<<
         vx = max(self.px1 - self.px0, 1)
@@ -121,7 +121,7 @@ class Viewport:
         return s, offset_x, offset_y
 
     def world_to_viewport(self, x, y):
-        # aplica rotação da janela 
+        # aplica rotação da janela
         cx = (self.window.x_min + self.window.x_max) / 2
         cy = (self.window.y_min + self.window.y_max) / 2
         ang = math.radians(self.window.rotation_angle)
@@ -365,13 +365,6 @@ class GraphicSystem:
                     self._draw_clipped_world_segment(x1, y1, x2, y2, obj.color)
                 continue
 
-            
-
-            # Objetos 2D
-            coords = [
-                self.viewport.world_to_viewport(x, y) for (x, y) in obj.coordinates
-            ]
-
             # PONTO
             if obj.obj_type == POINT:
                 if obj.coordinates:
@@ -379,8 +372,14 @@ class GraphicSystem:
                     inside = self._clip_point_world(px, py)
                     if inside:
                         x, y = self.viewport.world_to_viewport(px, py)
-                        self.canvas.create_oval(x-3, y-3, x+3, y+3, fill=obj.color, outline=obj.color)
-
+                        self.canvas.create_oval(
+                            x - 3,
+                            y - 3,
+                            x + 3,
+                            y + 3,
+                            fill=obj.color,
+                            outline=obj.color,
+                        )
 
             # RETA
             elif obj.obj_type == LINE:
@@ -395,7 +394,10 @@ class GraphicSystem:
                     clipped_poly = self._clip_polygon_world(obj.coordinates)
                     # pode acontecer de virar segmentinho/degenerado após clip
                     if clipped_poly and len(clipped_poly) >= 2:
-                        pv = [self.viewport.world_to_viewport(x, y) for (x, y) in clipped_poly]
+                        pv = [
+                            self.viewport.world_to_viewport(x, y)
+                            for (x, y) in clipped_poly
+                        ]
                         if getattr(obj, "filled", False) and len(pv) >= 3:
                             flat = [v for p in pv for v in p]
                             self.canvas.create_polygon(
@@ -621,8 +623,8 @@ class GraphicSystem:
         tz = simpledialog.askfloat("Translação 3D", "tz:", parent=self.objects_listbox)
         if tz is None:
             return
-        
-        for p in obj._unique_points():     # evita transformar um vértice repetido
+
+        for p in obj._unique_points():  # evita transformar um vértice repetido
             p.translate(tx, ty, tz)
 
         self.redraw()
@@ -754,7 +756,7 @@ class GraphicSystem:
             if cz is None:
                 return
 
-        for p in obj._unique_points():     # evita escalonar vértice repetido
+        for p in obj._unique_points():  # evita escalonar vértice repetido
             p.scale(sx, sy, sz, cx, cy, cz)
 
         self.redraw()
@@ -798,12 +800,12 @@ class GraphicSystem:
         if obj is None:
             messagebox.showinfo("Aviso", "Selecione um objeto na lista.")
             return
-        
+
         # Se Objeto 3D
         if isinstance(obj, Object3D):
             self.rotate_3d_selected(obj)
             return
-        
+
         # Se Objeto 2D
         ang = simpledialog.askfloat(
             "Rotação",
@@ -812,7 +814,7 @@ class GraphicSystem:
         )
         if ang is None:
             return
-        
+
         # escolher centro: mundo, objeto, arbitrário
         choice = self.choose_rotation_center(self.objects_listbox)
         if choice is None:
@@ -839,7 +841,7 @@ class GraphicSystem:
                 "Erro", "Opção inválida. Use 'mundo', 'objeto' ou 'arbitrario'."
             )
             return
-        
+
         M = make_rotation(ang, cx, cy)
         apply_transform(M, obj)
         self.redraw()
@@ -851,15 +853,16 @@ class GraphicSystem:
         if not cfg or not cfg.get("ok"):
             return
 
-        ref = cfg["reference"]         # "world" | "object" | "arbitrary"
-        axis = cfg["axis"]             # "x" | "y" | "z" | "arbitrary"
-        ang  = cfg["angle"]
-        center = cfg["center"]         # tuple ou None
-        direction = cfg["direction"]   # tuple ou None
+        ref = cfg["reference"]  # "world" | "object" | "arbitrary"
+        axis = cfg["axis"]  # "x" | "y" | "z" | "arbitrary"
+        ang = cfg["angle"]
+        center = cfg["center"]  # tuple ou None
+        direction = cfg["direction"]  # tuple ou None
 
         # requer suporte no Object3D (rotate_about / rotate_axis)
-        obj.rotate_about(reference=ref, axis=axis, angle_deg=ang,
-                        center=center, direction=direction)
+        obj.rotate_about(
+            reference=ref, axis=axis, angle_deg=ang, center=center, direction=direction
+        )
 
         self.redraw()
         self.refresh_listbox()
@@ -871,21 +874,33 @@ class GraphicSystem:
         d.grab_set()
 
         # ====== Referencial ======
-        tk.Label(d, text="Referencial:").grid(row=0, column=0, sticky="w", padx=6, pady=(8,4))
+        tk.Label(d, text="Referencial:").grid(
+            row=0, column=0, sticky="w", padx=6, pady=(8, 4)
+        )
         ref_var = tk.StringVar(value="world")
-        ref_opts = [("Mundo", "world"), ("Objeto", "object"), ("Arbitrário", "arbitrary")]
+        ref_opts = [
+            ("Mundo", "world"),
+            ("Objeto", "object"),
+            ("Arbitrário", "arbitrary"),
+        ]
         for i, (label, val) in enumerate(ref_opts, start=1):
-            tk.Radiobutton(d, text=label, variable=ref_var, value=val).grid(row=0, column=i, sticky="w", padx=4, pady=(8,4))
+            tk.Radiobutton(d, text=label, variable=ref_var, value=val).grid(
+                row=0, column=i, sticky="w", padx=4, pady=(8, 4)
+            )
 
         # ====== Eixo ======
         tk.Label(d, text="Eixo:").grid(row=1, column=0, sticky="w", padx=6, pady=4)
         axis_var = tk.StringVar(value="z")
         axis_opts = [("X", "x"), ("Y", "y"), ("Z", "z"), ("Arbitrário", "arbitrary")]
         for i, (label, val) in enumerate(axis_opts, start=1):
-            tk.Radiobutton(d, text=label, variable=axis_var, value=val).grid(row=1, column=i, sticky="w", padx=4, pady=4)
+            tk.Radiobutton(d, text=label, variable=axis_var, value=val).grid(
+                row=1, column=i, sticky="w", padx=4, pady=4
+            )
 
         # ====== Ângulo ======
-        tk.Label(d, text="Ângulo (graus):").grid(row=2, column=0, sticky="w", padx=6, pady=4)
+        tk.Label(d, text="Ângulo (graus):").grid(
+            row=2, column=0, sticky="w", padx=6, pady=4
+        )
         entry_angle = tk.Entry(d, width=10)
         entry_angle.insert(0, "15")
         entry_angle.grid(row=2, column=1, sticky="w")
@@ -905,7 +920,14 @@ class GraphicSystem:
         # ====== Botões ======
         btns = tk.Frame(d)
         btns.grid(row=5, column=0, columnspan=4, pady=8)
-        result = {"ok": False, "reference": None, "axis": None, "angle": 0.0, "center": None, "direction": None}
+        result = {
+            "ok": False,
+            "reference": None,
+            "axis": None,
+            "angle": 0.0,
+            "center": None,
+            "direction": None,
+        }
 
         # ---- utilidades de layout dinâmico ----
         def show_center(show: bool):
@@ -952,7 +974,9 @@ class GraphicSystem:
                     cx, cy, cz = map(float, entry_center.get().strip().split(","))
                     center = (cx, cy, cz)
                 except Exception:
-                    messagebox.showerror("Erro", "Centro inválido. Use x,y,z.", parent=d)
+                    messagebox.showerror(
+                        "Erro", "Centro inválido. Use x,y,z.", parent=d
+                    )
                     entry_center.focus_set()
                     return
 
@@ -962,11 +986,20 @@ class GraphicSystem:
                     dx, dy, dz = map(float, entry_dir.get().strip().split(","))
                     direction = (dx, dy, dz)
                 except Exception:
-                    messagebox.showerror("Erro", "Direção inválida. Use dx,dy,dz.", parent=d)
+                    messagebox.showerror(
+                        "Erro", "Direção inválida. Use dx,dy,dz.", parent=d
+                    )
                     entry_dir.focus_set()
                     return
 
-            result.update(ok=True, reference=ref, axis=axis, angle=angle, center=center, direction=direction)
+            result.update(
+                ok=True,
+                reference=ref,
+                axis=axis,
+                angle=angle,
+                center=center,
+                direction=direction,
+            )
             d.destroy()
 
         def cancel():
@@ -1061,7 +1094,7 @@ class GraphicSystem:
         self.refresh_listbox()
         self.redraw()
 
-    # Recebe Point3D OU tupla (x,y,z) e devolve (x2d, y2d) no espaço de MUNDO 2D 
+    # Recebe Point3D OU tupla (x,y,z) e devolve (x2d, y2d) no espaço de MUNDO 2D
     def _project3d_to2d_world(self, p3):
         if hasattr(p3, "x"):
             x, y, z = p3.x, p3.y, p3.z
@@ -1088,29 +1121,29 @@ class GraphicSystem:
             grid2d = [[self._project3d_to2d_world(p) for p in row] for row in grid3d]
 
             # Linhas em u (varia i, j fixo)
-            for j in range(len(grid2d[0])):             # nv+1
-                for i in range(len(grid2d) - 1):        # nu
+            for j in range(len(grid2d[0])):  # nv+1
+                for i in range(len(grid2d) - 1):  # nu
                     x1, y1 = grid2d[i][j]
-                    x2, y2 = grid2d[i+1][j]
+                    x2, y2 = grid2d[i + 1][j]
                     self._draw_clipped_world_segment(x1, y1, x2, y2, surface_obj.color)
 
             # Linhas em v (varia j, i fixo)
-            for i in range(len(grid2d)):                # nu+1
-                for j in range(len(grid2d[0]) - 1):     # nv
+            for i in range(len(grid2d)):  # nu+1
+                for j in range(len(grid2d[0]) - 1):  # nv
                     x1, y1 = grid2d[i][j]
-                    x2, y2 = grid2d[i][j+1]
+                    x2, y2 = grid2d[i][j + 1]
                     self._draw_clipped_world_segment(x1, y1, x2, y2, surface_obj.color)
-
 
     # ---- Helpers para clipping correto com janela possivelmente rotacionada ----
     def _rotate_point(self, x, y, ang_deg, cx, cy):
         import math
+
         a = math.radians(ang_deg)
         ca, sa = math.cos(a), math.sin(a)
         xr, yr = x - cx, y - cy
         return (xr * ca - yr * sa + cx, xr * sa + yr * ca + cy)
 
-    # Clipping para pontos 
+    # Clipping para pontos
     def _clip_point_world(self, x, y):
         cx = (self.window.x_min + self.window.x_max) / 2.0
         cy = (self.window.y_min + self.window.y_max) / 2.0
@@ -1126,7 +1159,6 @@ class GraphicSystem:
             res = clip_point(x, y, self.window)
         return (x, y) if res is not None else None
 
-
     # Clipping para retas respeitando as coordenadas de mundo e rotação de janela
     def _clip_line_world(self, p1, p2):
         # Centro da window (para rotacionar em torno dele)
@@ -1138,8 +1170,11 @@ class GraphicSystem:
         if abs(ang) > 1e-9:
             q1 = self._rotate_point(p1[0], p1[1], +ang, cx, cy)
             q2 = self._rotate_point(p2[0], p2[1], +ang, cx, cy)
+
             # cria uma "cópia" rasa da janela (mesmos limites)
-            class _TmpW: pass
+            class _TmpW:
+                pass
+
             w = _TmpW()
             w.x_min, w.x_max = self.window.x_min, self.window.x_max
             w.y_min, w.y_max = self.window.y_min, self.window.y_max
@@ -1163,7 +1198,7 @@ class GraphicSystem:
                 return cohen_sutherland(p1[0], p1[1], p2[0], p2[1], self.window)
             else:
                 return liang_barsky(p1[0], p1[1], p2[0], p2[1], self.window)
-            
+
     # Clipping para polígonos/wireframes respeitando as coordenadas de mundo e rotação de janela
     def _clip_polygon_world(self, points):
         if not points:
@@ -1177,7 +1212,9 @@ class GraphicSystem:
         if abs(ang) > 1e-9:
             pts_local = [self._rotate_point(x, y, +ang, cx, cy) for (x, y) in points]
 
-            class _TmpW: pass
+            class _TmpW:
+                pass
+
             w = _TmpW()
             w.x_min, w.x_max = self.window.x_min, self.window.x_max
             w.y_min, w.y_max = self.window.y_min, self.window.y_max
@@ -1192,7 +1229,6 @@ class GraphicSystem:
         # Sem rotação: pode usar a window direto
         return sutherland_hodgman(points, self.window) or []
 
-
     def _draw_clipped_world_segment(self, x1, y1, x2, y2, color):
         clipped = self._clip_line_world((x1, y1), (x2, y2))
         if not clipped:
@@ -1201,4 +1237,3 @@ class GraphicSystem:
         v1 = self.viewport.world_to_viewport(cx1, cy1)
         v2 = self.viewport.world_to_viewport(cx2, cy2)
         self.canvas.create_line(v1, v2, fill=color)
-    

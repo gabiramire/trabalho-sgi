@@ -67,9 +67,11 @@ class Object3D:
         uniq = []
         for a, b in self.edges:
             if id(a) not in seen:
-                seen.add(id(a)); uniq.append(a)
+                seen.add(id(a))
+                uniq.append(a)
             if id(b) not in seen:
-                seen.add(id(b)); uniq.append(b)
+                seen.add(id(b))
+                uniq.append(b)
         return uniq
 
     def translate(self, tx: float, ty: float, tz: float):
