@@ -219,6 +219,7 @@ def create_cube3d_dialog(menu_frame, system):
     btn_create.grid(row=3, column=0, columnspan=2, pady=10)
 
 
+
 def create_wireframe3d_dialog(menu_frame, system):
     dialog = tk.Toplevel(menu_frame)
     dialog.title("Criar Wireframe 3D")
@@ -257,51 +258,95 @@ def create_wireframe3d_dialog(menu_frame, system):
 def start_wireframe3d(name, num_edges, menu_frame, system):
     dialog = tk.Toplevel(menu_frame)
     dialog.title("Definir Arestas do Wireframe 3D")
-    points = []
-    entries = []
-    total_points = num_edges * 2
+    dialog.transient(menu_frame.winfo_toplevel())
+    dialog.grab_set()
+
     tk.Label(
         dialog,
-        text=f"Defina as coordenadas dos {total_points} pontos (x,y,z) para as {num_edges} arestas:",
-    ).pack(padx=5, pady=5)
+        text=f"Defina as {num_edges} arestas abaixo (cada vértice no formato x,y,z):",
+    ).pack(padx=8, pady=(8, 4), anchor="w")
+
+    # === Área rolável ===
     frame_entries = tk.Frame(dialog)
-    frame_entries.pack(padx=5, pady=5)
-    canvas = tk.Canvas(frame_entries)
+    frame_entries.pack(fill="both", expand=True, padx=8, pady=4)
+
+    canvas = tk.Canvas(frame_entries, highlightthickness=0, height=360, bg="white")
     scrollbar = tk.Scrollbar(frame_entries, orient="vertical", command=canvas.yview)
-    scrollable_frame = tk.Frame(canvas)
-    scrollable_frame.bind(
-        "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-    )
-    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
     canvas.configure(yscrollcommand=scrollbar.set)
-    canvas.pack(side="left", fill="both", expand=True)
     scrollbar.pack(side="right", fill="y")
-    for i in range(total_points):
-        lbl = tk.Label(scrollable_frame, text=f"Ponto {i+1} (x,y,z):")
-        lbl.grid(row=i, column=0, padx=2, pady=2)
-        entry = tk.Entry(scrollable_frame, width=20)
-        entry.grid(row=i, column=1, padx=2, pady=2)
-        entries.append(entry)
+    canvas.pack(side="left", fill="both", expand=True)
+
+    scrollable_frame = tk.Frame(canvas, bg="white")
+    win_id = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+
+    # alinha largura do frame interno com o canvas
+    canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win_id, width=e.width))
+    scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+    # ===== Cabeçalho (AGORA NO MESMO GRID DO CONTEÚDO) =====
+    tk.Label(scrollable_frame, text="#", width=4, anchor="center", bg="white").grid(row=0, column=0, padx=2, pady=(0, 6))
+    tk.Label(scrollable_frame, text="Vértice 1 (x,y,z)", anchor="w", bg="white").grid(row=0, column=1, padx=2, pady=(0, 6), sticky="w")
+    tk.Label(scrollable_frame, text="Vértice 2 (x,y,z)", anchor="w", bg="white").grid(row=0, column=2, padx=2, pady=(0, 6), sticky="w")
+
+    # pesos das colunas p/ expandirem corretamente
+    scrollable_frame.grid_columnconfigure(1, weight=1)
+    scrollable_frame.grid_columnconfigure(2, weight=1)
+
+    # ===== Entradas: 1 linha por aresta, 2 colunas (v1, v2) =====
+    edge_entries = []
+    for i in range(num_edges):
+        row = i + 1
+        tk.Label(scrollable_frame, text=f"{i+1}", width=4, anchor="center", bg="white").grid(
+            row=row, column=0, padx=2, pady=2
+        )
+
+        e1 = tk.Entry(scrollable_frame)
+        e2 = tk.Entry(scrollable_frame)
+
+        # (opcional) exemplos
+        # e1.insert(0, "0,0,0"); e2.insert(0, "0,0,0")
+
+        e1.grid(row=row, column=1, padx=2, pady=2, sticky="ew")
+        e2.grid(row=row, column=2, padx=2, pady=2, sticky="ew")
+        edge_entries.append((e1, e2))
+
+    # foco no primeiro campo
+    if edge_entries:
+        edge_entries[0][0].focus_set()
+
+    # ===== Botões =====
+    btns = tk.Frame(dialog)
+    btns.pack(pady=8)
 
     def submit_points():
-        for i, entry in enumerate(entries):
+        points = []
+        for idx, (e1, e2) in enumerate(edge_entries, start=1):
+            t1 = e1.get().strip()
+            t2 = e2.get().strip()
             try:
-                x, y, z = map(float, entry.get().strip().split(","))
-                points.append((x, y, z))
-            except ValueError:
+                x1, y1, z1 = map(float, t1.split(","))
+                x2, y2, z2 = map(float, t2.split(","))
+            except Exception:
                 tk.messagebox.showerror(
                     "Erro",
-                    f"Coordenadas inválidas para o ponto {i+1}. Use o formato x,y,z com valores numéricos.",
+                    f"Coordenadas inválidas na aresta {idx}.\nUse o formato x,y,z.",
+                    parent=dialog,
                 )
+                (e1 if t1.count(",") != 2 else e2).focus_set()
                 return
-        if len(points) != total_points:
-            tk.messagebox.showerror("Erro", f"Defina exatamente {total_points} pontos.")
-            return
+            points.extend([(x1, y1, z1), (x2, y2, z2)])
+
         system.finalize_wireframe3d(name, points)
         dialog.destroy()
 
-    btn_submit = tk.Button(dialog, text="Criar Wireframe 3D", command=submit_points)
-    btn_submit.pack(pady=10)
+    tk.Button(btns, text="Criar Wireframe 3D", command=submit_points).pack()
+
+    # submit com Enter
+    dialog.bind("<Return>", lambda _: submit_points())
+
+    # garante scrollregion no início
+    dialog.after(50, lambda: canvas.configure(scrollregion=canvas.bbox("all")))
+
 
 
 def create_default_color(menu_frame, system):
@@ -351,7 +396,6 @@ def create_transform_frame(menu_frame, system, main_frame):
     )
     btn_delete.pack(fill=tk.X, pady=2)
 
-    # Frame inferior direito para exibir coordenadas
     coords_frame = tk.Frame(main_frame)
     coords_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=5)
 
@@ -428,7 +472,7 @@ def create_window3d_controls(menu_frame, system):
 
     projection_label = tk.Label(
         window3d_frame,
-        text=f"Projeção: {"Paralela" if system.camera.projection_mode == 'parallel' else 'Perspectiva'}",
+        text=f"Projeção: {'Paralela' if system.camera.projection_mode == 'parallel' else 'Perspectiva'}",
     )
     projection_label.pack(pady=4)
     projection_center = tk.Label(
@@ -441,7 +485,7 @@ def create_window3d_controls(menu_frame, system):
 
     def update_projection_label():
         system.projection_label.config(
-            text=f"Projeção: {"Paralela" if system.camera.projection_mode == 'parallel' else 'Perspectiva'}"
+            text=f"Projeção: {'Paralela' if system.camera.projection_mode == 'parallel' else 'Perspectiva'}"
         )
         system.projection_center.config(text=f"Centro de Projeção: {system.camera.d}")
 

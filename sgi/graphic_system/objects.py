@@ -42,6 +42,13 @@ class Object2D:
         self.curve_mode = curve_mode  # modo da curva (apenas para curvas)
 
 
+    def centroid(self):
+        if not self.coordinates:
+            return 0.0, 0.0
+        xs = [p[0] for p in self.coordinates]
+        ys = [p[1] for p in self.coordinates]
+        return sum(xs) / len(xs), sum(ys) / len(ys)
+
 class Object3D:
     def __init__(
         self, name: str, edges: List[Tuple[Point3D, Point3D]], color: str = "#000000"
@@ -53,38 +60,35 @@ class Object3D:
     def __repr__(self):
         return f"Object3D({self.name}, edges={len(self.edges)})"
 
-    def translate(self, tx: float, ty: float, tz: float):
-        for p1, p2 in self.edges:
-            p1.translate(tx, ty, tz)
-            p2.translate(tx, ty, tz)
+    def _unique_points(self):
+        seen = set()
+        uniq = []
+        for a, b in self.edges:
+            if id(a) not in seen:
+                seen.add(id(a)); uniq.append(a)
+            if id(b) not in seen:
+                seen.add(id(b)); uniq.append(b)
+        return uniq
 
-    def scale(
-        self,
-        sx: float,
-        sy: float,
-        sz: float,
-        cx: float = 0,
-        cy: float = 0,
-        cz: float = 0,
-    ):
-        for p1, p2 in self.edges:
-            p1.scale(sx, sy, sz, cx, cy, cz)
-            p2.scale(sx, sy, sz, cx, cy, cz)
+    def translate(self, tx: float, ty: float, tz: float):
+        for p in self._unique_points():
+            p.translate(tx, ty, tz)
+
+    def scale(self, sx: float, sy: float, sz: float, cx: float = 0, cy: float = 0, cz: float = 0):
+        for p in self._unique_points():
+            p.scale(sx, sy, sz, cx, cy, cz)
 
     def rotate_x(self, angle_deg: float):
-        for p1, p2 in self.edges:
-            p1.rotate_x(angle_deg)
-            p2.rotate_x(angle_deg)
+        for p in self._unique_points():
+            p.rotate_x(angle_deg)
 
     def rotate_y(self, angle_deg: float):
-        for p1, p2 in self.edges:
-            p1.rotate_y(angle_deg)
-            p2.rotate_y(angle_deg)
+        for p in self._unique_points():
+            p.rotate_y(angle_deg)
 
     def rotate_z(self, angle_deg: float):
-        for p1, p2 in self.edges:
-            p1.rotate_z(angle_deg)
-            p2.rotate_z(angle_deg)
+        for p in self._unique_points():
+            p.rotate_z(angle_deg)
 
     def rotate_axis(self, p1: Point3D, p2: Point3D, angle_deg: float):
         ux, uy, uz = (p2.x - p1.x, p2.y - p1.y, p2.z - p1.z)
@@ -97,58 +101,63 @@ class Object3D:
         cosA = math.cos(angle)
         sinA = math.sin(angle)
 
-        # R = [[
-        #     1, 0, 0, 0,
-        #     0, math.cos(angle), math.sin(angle), 0,
-        #     0, -math.sin(angle), math.cos(angle), 0,
-        #     0, 0, 0, 1
-        # ],
-        # [
-        #     math.cos(angle), 0, -math.sin(angle), 0,
-        #     0, 1, 0, 0,
-        #     math.sin(angle), 0, math.cos(angle), 0,
-        #     0, 0, 0, 1
-        # ],
-        # [
-        #     math.cos(angle), math.sin(angle), 0, 0,
-        #     -math.sin(angle), math.cos(angle), 0, 0,
-        #     0, 0, 1, 0,
-        #     0, 0, 0, 1
-        # ]]
-
-        # Rodrigues rotation formula
+        # matriz 3x3 de Rodrigues
         R = [
-            [
-                cosA + ux**2 * (1 - cosA),
-                ux * uy * (1 - cosA) - uz * sinA,
-                ux * uz * (1 - cosA) + uy * sinA,
-            ],
-            [
-                uy * ux * (1 - cosA) + uz * sinA,
-                cosA + uy**2 * (1 - cosA),
-                uy * uz * (1 - cosA) - ux * sinA,
-            ],
-            [
-                uz * ux * (1 - cosA) - uy * sinA,
-                uz * uy * (1 - cosA) + ux * sinA,
-                cosA + uz**2 * (1 - cosA),
-            ],
+            [cosA + ux*ux*(1-cosA),     ux*uy*(1-cosA) - uz*sinA, ux*uz*(1-cosA) + uy*sinA],
+            [uy*ux*(1-cosA) + uz*sinA,  cosA + uy*uy*(1-cosA),    uy*uz*(1-cosA) - ux*sinA],
+            [uz*ux*(1-cosA) - uy*sinA,  uz*uy*(1-cosA) + ux*sinA, cosA + uz*uz*(1-cosA)],
         ]
 
-        for edge in self.edges:
-            for point in edge:
-                x, y, z = point.x - p1.x, point.y - p1.y, point.z - p1.z
-                xr = R[0][0] * x + R[0][1] * y + R[0][2] * z
-                yr = R[1][0] * x + R[1][1] * y + R[1][2] * z
-                zr = R[2][0] * x + R[2][1] * y + R[2][2] * z
-                point.x, point.y, point.z = xr + p1.x, yr + p1.y, zr + p1.z
+        # aplicar uma única vez por vértice
+        for point in self._unique_points():
+            x, y, z = point.x - p1.x, point.y - p1.y, point.z - p1.z
+            xr = R[0][0]*x + R[0][1]*y + R[0][2]*z
+            yr = R[1][0]*x + R[1][1]*y + R[1][2]*z
+            zr = R[2][0]*x + R[2][1]*y + R[2][2]*z
+            point.x, point.y, point.z = xr + p1.x, yr + p1.y, zr + p1.z
 
-    def rotate(self, angle_deg: float, cx: float = 0, cy: float = 0, cz: float = 0):
-        self.translate(-cx, -cy, -cz)
-        self.rotate_z(angle_deg)
-        self.rotate_y(angle_deg)
-        self.rotate_x(angle_deg)
-        self.translate(cx, cy, cz)
+    def rotate_about(self, reference, axis, angle_deg, center=None, direction=None):
+        if axis in ('x','y','z'):
+            if reference == 'object':
+                c = self.centroid()
+            elif reference == 'arbitrary' and center is not None:
+                c = center
+            else:
+                c = (0.0, 0.0, 0.0)  # mundo
+            self._rotate_euler(axis, angle_deg, c)
+        else:
+            if reference == 'object' and center is None:
+                center = self.centroid()
+            if center is None or direction is None:
+                return
+            p0 = Point3D(*center)
+            p1 = Point3D(center[0]+direction[0], center[1]+direction[1], center[2]+direction[2])
+            self.rotate_axis(p0, p1, angle_deg)
+
+    def _rotate_euler(self, axis: str, angle_deg: float, center: Tuple[float,float,float]):
+        cx, cy, cz = center
+        ang = math.radians(angle_deg)
+        c, s = math.cos(ang), math.sin(ang)
+
+        for p in self._unique_points():
+            x, y, z = p.x - cx, p.y - cy, p.z - cz
+            if axis == 'x':
+                y, z = y * c - z * s, y * s + z * c
+            elif axis == 'y':
+                x, z = x * c + z * s, -x * s + z * c
+            elif axis == 'z':
+                x, y = x * c - y * s, x * s + y * c
+            p.x, p.y, p.z = x + cx, y + cy, z + cz
+
+
+    def centroid(self):
+        pts = self._unique_points()
+        if not pts:
+            return 0.0, 0.0, 0.0
+        n = float(len(pts))
+        return (sum(p.x for p in pts)/n,
+                sum(p.y for p in pts)/n,
+                sum(p.z for p in pts)/n)
 
     def project(self, camera) -> List[Tuple[Tuple[float, float], Tuple[float, float]]]:
         vrp = camera.vrp
@@ -227,3 +236,4 @@ class DisplayFile:
 
     def remove(self, obj: Union[Object2D, Object3D]):
         self.objects.remove(obj)
+

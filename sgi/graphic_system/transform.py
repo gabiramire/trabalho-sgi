@@ -45,22 +45,3 @@ def make_rotation(angle_deg, cx=0, cy=0):
     t1 = make_translation(-cx, -cy)
     t2 = make_translation(cx, cy)
     return mat_mult(t2, mat_mult(r, t1))
-
-
-def centroid(coords: List[Tuple[float, float]]):
-    if not coords:
-        return 0.0, 0.0
-    xs = [p[0] for p in coords]
-    ys = [p[1] for p in coords]
-    return sum(xs) / len(xs), sum(ys) / len(ys)
-
-
-def centroid_3d(obj: Object3D):
-    if not obj.edges:
-        return 0.0, 0.0, 0.0
-    xs, ys, zs = [], [], []
-    for p1, p2 in obj.edges:
-        xs.extend([p1.x, p2.x])
-        ys.extend([p1.y, p2.y])
-        zs.extend([p1.z, p2.z])
-    return sum(xs) / len(xs), sum(ys) / len(ys), sum(zs) / len(zs)

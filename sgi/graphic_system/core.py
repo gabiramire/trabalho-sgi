@@ -4,7 +4,7 @@ from tkinter import colorchooser, filedialog, messagebox, simpledialog
 
 from .bezier_curve import bezier_curve, bezier_multisegment
 from .bspline_fd import evaluate_bspline_fd
-from .clipping import cohen_sutherland, liang_barsky, sutherland_hodgman
+from .clipping import cohen_sutherland, liang_barsky, sutherland_hodgman, clip_point
 from .obj_descriptor import DescritorOBJ
 from .objects import (
     CURVE,
@@ -19,8 +19,6 @@ from .objects import (
 from .point3d import Point3D
 from .transform import (
     apply_transform,
-    centroid,
-    centroid_3d,
     make_rotation,
     make_scale,
     make_translation,
@@ -121,7 +119,7 @@ class Viewport:
         return s, offset_x, offset_y
 
     def world_to_viewport(self, x, y):
-        # aplica rotação da janela (como você já fazia)
+        # aplica rotação da janela 
         cx = (self.window.x_min + self.window.x_max) / 2
         cy = (self.window.y_min + self.window.y_max) / 2
         ang = math.radians(self.window.rotation_angle)
@@ -214,8 +212,8 @@ class GraphicSystem:
         self.camera.rotate_camera(yaw_deg, pitch_deg, roll_deg)
 
     def create_cube_3d(self, name, initial_point, size):
-        x, y = initial_point
-        xw, yw = self.viewport.viewport_to_world(x, y)
+        xw, yw = initial_point
+
         z = 0
 
         half = size / 2.0
@@ -356,9 +354,11 @@ class GraphicSystem:
             if isinstance(obj, Object3D):
                 projected_edges = obj.project(self.camera)
                 for (x1, y1), (x2, y2) in projected_edges:
-                    px1, py1 = self.viewport.world_to_viewport(x1, y1)
-                    px2, py2 = self.viewport.world_to_viewport(x2, y2)
-                    self.canvas.create_line(px1, py1, px2, py2, fill=obj.color)
+                    # clipping 2D para objetos 3D
+                    self._draw_clipped_world_segment(x1, y1, x2, y2, obj.color)
+                    # px1, py1 = self.viewport.world_to_viewport(x1, y1)
+                    # px2, py2 = self.viewport.world_to_viewport(x2, y2)
+                    # self.canvas.create_line(px1, py1, px2, py2, fill=obj.color)
                 continue
 
             # Objetos 2D
@@ -366,33 +366,31 @@ class GraphicSystem:
                 self.viewport.world_to_viewport(x, y) for (x, y) in obj.coordinates
             ]
 
+            # PONTO
             if obj.obj_type == POINT:
-                if coords and self.clip_point(
-                    obj.coordinates[0][0], obj.coordinates[0][1]
-                ):
-                    x, y = coords[0]
-                    self.canvas.create_oval(
-                        x - 3, y - 3, x + 3, y + 3, fill=obj.color, outline=obj.color
-                    )
+                if obj.coordinates:
+                    px, py = obj.coordinates[0]
+                    inside = self._clip_point_world(px, py)
+                    if inside:
+                        x, y = self.viewport.world_to_viewport(px, py)
+                        self.canvas.create_oval(x-3, y-3, x+3, y+3, fill=obj.color, outline=obj.color)
 
+
+            # RETA
             elif obj.obj_type == LINE:
                 if len(obj.coordinates) >= 2:
-                    clipped = self.clip_line(obj.coordinates[0], obj.coordinates[1])
-                    if clipped:
-                        x1, y1, x2, y2 = clipped
-                        c1 = self.viewport.world_to_viewport(x1, y1)
-                        c2 = self.viewport.world_to_viewport(x2, y2)
-                        self.canvas.create_line(c1, c2, fill=obj.color)
+                    x1, y1 = obj.coordinates[0]
+                    x2, y2 = obj.coordinates[1]
+                    self._draw_clipped_world_segment(x1, y1, x2, y2, obj.color)
 
+            # POLÍGONO
             elif obj.obj_type == WIREFRAME:
                 if len(obj.coordinates) >= 3:
-                    clipped_poly = self.clip_polygon(obj.coordinates)
-                    if clipped_poly:
-                        pv = [
-                            self.viewport.world_to_viewport(x, y)
-                            for (x, y) in clipped_poly
-                        ]
-                        if getattr(obj, "filled", False):
+                    clipped_poly = self._clip_polygon_world(obj.coordinates)
+                    # pode acontecer de virar segmentinho/degenerado após clip
+                    if clipped_poly and len(clipped_poly) >= 2:
+                        pv = [self.viewport.world_to_viewport(x, y) for (x, y) in clipped_poly]
+                        if getattr(obj, "filled", False) and len(pv) >= 3:
                             flat = [v for p in pv for v in p]
                             self.canvas.create_polygon(
                                 *flat,
@@ -420,12 +418,9 @@ class GraphicSystem:
                         curve_pts = []
 
                     for i in range(len(curve_pts) - 1):
-                        clipped = self.clip_line(curve_pts[i], curve_pts[i + 1])
-                        if clipped:
-                            x1, y1, x2, y2 = clipped
-                            c1 = self.viewport.world_to_viewport(x1, y1)
-                            c2 = self.viewport.world_to_viewport(x2, y2)
-                            self.canvas.create_line(c1, c2, fill=obj.color)
+                        x1, y1 = curve_pts[i]
+                        x2, y2 = curve_pts[i + 1]
+                        self._draw_clipped_world_segment(x1, y1, x2, y2, obj.color)
 
         # Desenhar pontos temporários para linhas e wireframes em construção
         if self.current_type in [WIREFRAME, LINE, CURVE] and self.current_points:
@@ -619,9 +614,12 @@ class GraphicSystem:
         tz = simpledialog.askfloat("Translação 3D", "tz:", parent=self.objects_listbox)
         if tz is None:
             return
-        for edge in obj.edges:
-            for p in edge:
-                p.translate(tx, ty, tz)
+        
+        for p in obj._unique_points():     # evita transformar um vértice repetido
+            p.translate(tx, ty, tz)
+
+        self.redraw()
+        self.refresh_listbox()
 
     def scale_selected(self):
         obj = self.get_selected_object()
@@ -663,7 +661,7 @@ class GraphicSystem:
             "Usar centro do objeto como centro do escalonamento?\n(Yes = centro do objeto, No = escolher ponto arbitrário)",
         )
         if center_choice:
-            cx, cy = centroid(obj.coordinates)
+            cx, cy = obj.centroid()
         else:
             cx = simpledialog.askfloat(
                 "Centro arbitrário", "cx:", parent=self.objects_listbox
@@ -731,7 +729,7 @@ class GraphicSystem:
             "Usar centro do objeto como centro do escalonamento?\n(Yes = centro do objeto, No = escolher ponto arbitrário)",
         )
         if center_choice:
-            cx, cy, cz = centroid_3d(obj)
+            cx, cy, cz = obj.centroid()
         else:
             cx = simpledialog.askfloat(
                 "Centro arbitrário", "cx:", parent=self.objects_listbox
@@ -749,9 +747,11 @@ class GraphicSystem:
             if cz is None:
                 return
 
-        for edge in obj.edges:
-            for p in edge:
-                p.scale(sx, sy, sz, cx, cy, cz)
+        for p in obj._unique_points():     # evita escalonar vértice repetido
+            p.scale(sx, sy, sz, cx, cy, cz)
+
+        self.redraw()
+        self.refresh_listbox()
 
     def choose_rotation_center(self, parent):
         result = {"choice": None}
@@ -791,6 +791,13 @@ class GraphicSystem:
         if obj is None:
             messagebox.showinfo("Aviso", "Selecione um objeto na lista.")
             return
+        
+        # Se Objeto 3D
+        if isinstance(obj, Object3D):
+            self.rotate_3d_selected(obj)
+            return
+        
+        # Se Objeto 2D
         ang = simpledialog.askfloat(
             "Rotação",
             "Ângulo em graus (positivo: anti-horário):",
@@ -798,22 +805,17 @@ class GraphicSystem:
         )
         if ang is None:
             return
+        
         # escolher centro: mundo, objeto, arbitrário
         choice = self.choose_rotation_center(self.objects_listbox)
         if choice is None:
             return
         choice = choice.strip().lower()
 
-        if isinstance(obj, Object3D):
-            self.rotate_3d_selected(obj, ang, choice)
-            self.redraw()
-            self.refresh_listbox()
-            return
-
         if choice == "mundo":
             cx, cy = 0.0, 0.0
         elif choice == "objeto":
-            cx, cy = centroid(obj.coordinates)
+            cx, cy = obj.centroid()
         elif choice == "arbitrario":
             cx = simpledialog.askfloat(
                 "Centro arbitrário", "cx:", parent=self.objects_listbox
@@ -830,41 +832,148 @@ class GraphicSystem:
                 "Erro", "Opção inválida. Use 'mundo', 'objeto' ou 'arbitrario'."
             )
             return
+        
         M = make_rotation(ang, cx, cy)
         apply_transform(M, obj)
         self.redraw()
         self.refresh_listbox()
         self.update_coords_label(obj)
 
-    def rotate_3d_selected(self, obj, ang, center_choice):
-        if center_choice == "mundo":
-            cx, cy, cz = self._window_center_3d()
-        elif center_choice == "objeto":
-            cx, cy, cz = centroid_3d(obj)
-        elif center_choice == "arbitrario":
-            cx = simpledialog.askfloat(
-                "Centro arbitrário", "cx:", parent=self.objects_listbox
-            )
-            if cx is None:
-                return
-            cy = simpledialog.askfloat(
-                "Centro arbitrário", "cy:", parent=self.objects_listbox
-            )
-            if cy is None:
-                return
-            cz = simpledialog.askfloat(
-                "Centro arbitrário", "cz:", parent=self.objects_listbox
-            )
-            if cz is None:
-                return
-        else:
-            messagebox.showerror(
-                "Erro", "Opção inválida. Use 'mundo', 'objeto' ou 'arbitrario'."
-            )
+    def rotate_3d_selected(self, obj: Object3D):
+        cfg = self._show_rotate3d_dialog(self.objects_listbox)
+        if not cfg or not cfg.get("ok"):
             return
-        obj.rotate(ang, cx, cy, cz)
+
+        ref = cfg["reference"]         # "world" | "object" | "arbitrary"
+        axis = cfg["axis"]             # "x" | "y" | "z" | "arbitrary"
+        ang  = cfg["angle"]
+        center = cfg["center"]         # tuple ou None
+        direction = cfg["direction"]   # tuple ou None
+
+        # requer suporte no Object3D (rotate_about / rotate_axis)
+        obj.rotate_about(reference=ref, axis=axis, angle_deg=ang,
+                        center=center, direction=direction)
+
         self.redraw()
         self.refresh_listbox()
+
+    def _show_rotate3d_dialog(self, parent):
+        d = tk.Toplevel(parent)
+        d.title("Rotacionar 3D")
+        d.transient(parent.winfo_toplevel())
+        d.grab_set()
+
+        # ====== Referencial ======
+        tk.Label(d, text="Referencial:").grid(row=0, column=0, sticky="w", padx=6, pady=(8,4))
+        ref_var = tk.StringVar(value="world")
+        ref_opts = [("Mundo", "world"), ("Objeto", "object"), ("Arbitrário", "arbitrary")]
+        for i, (label, val) in enumerate(ref_opts, start=1):
+            tk.Radiobutton(d, text=label, variable=ref_var, value=val).grid(row=0, column=i, sticky="w", padx=4, pady=(8,4))
+
+        # ====== Eixo ======
+        tk.Label(d, text="Eixo:").grid(row=1, column=0, sticky="w", padx=6, pady=4)
+        axis_var = tk.StringVar(value="z")
+        axis_opts = [("X", "x"), ("Y", "y"), ("Z", "z"), ("Arbitrário", "arbitrary")]
+        for i, (label, val) in enumerate(axis_opts, start=1):
+            tk.Radiobutton(d, text=label, variable=axis_var, value=val).grid(row=1, column=i, sticky="w", padx=4, pady=4)
+
+        # ====== Ângulo ======
+        tk.Label(d, text="Ângulo (graus):").grid(row=2, column=0, sticky="w", padx=6, pady=4)
+        entry_angle = tk.Entry(d, width=10)
+        entry_angle.insert(0, "15")
+        entry_angle.grid(row=2, column=1, sticky="w")
+
+        # ====== Centro (só se referencial = arbitrário) ======
+        center_row = 3
+        lbl_center = tk.Label(d, text="Centro (x,y,z):")
+        entry_center = tk.Entry(d, width=24)
+        entry_center.insert(0, "0,0,0")
+
+        # ====== Direção (só se eixo = arbitrário) ======
+        dir_row = 4
+        lbl_dir = tk.Label(d, text="Direção (dx,dy,dz):")
+        entry_dir = tk.Entry(d, width=24)
+        entry_dir.insert(0, "0,0,1")
+
+        # ====== Botões ======
+        btns = tk.Frame(d)
+        btns.grid(row=5, column=0, columnspan=4, pady=8)
+        result = {"ok": False, "reference": None, "axis": None, "angle": 0.0, "center": None, "direction": None}
+
+        # ---- utilidades de layout dinâmico ----
+        def show_center(show: bool):
+            if show:
+                lbl_center.grid(row=center_row, column=0, sticky="w", padx=6, pady=4)
+                entry_center.grid(row=center_row, column=1, columnspan=3, sticky="w")
+            else:
+                lbl_center.grid_remove()
+                entry_center.grid_remove()
+
+        def show_direction(show: bool):
+            if show:
+                lbl_dir.grid(row=dir_row, column=0, sticky="w", padx=6, pady=4)
+                entry_dir.grid(row=dir_row, column=1, columnspan=3, sticky="w")
+            else:
+                lbl_dir.grid_remove()
+                entry_dir.grid_remove()
+
+        def update_visibility(*_):
+            show_center(ref_var.get() == "arbitrary")
+            show_direction(axis_var.get() == "arbitrary")
+
+        ref_var.trace_add("write", update_visibility)
+        axis_var.trace_add("write", update_visibility)
+        update_visibility()  # estado inicial
+
+        def accept():
+            # ângulo
+            try:
+                angle = float(entry_angle.get().strip())
+            except Exception:
+                messagebox.showerror("Erro", "Ângulo inválido.", parent=d)
+                entry_angle.focus_set()
+                return
+
+            ref = ref_var.get()
+            axis = axis_var.get()
+            center = None
+            direction = None
+
+            # centro só quando referencial é arbitrário
+            if ref == "arbitrary":
+                try:
+                    cx, cy, cz = map(float, entry_center.get().strip().split(","))
+                    center = (cx, cy, cz)
+                except Exception:
+                    messagebox.showerror("Erro", "Centro inválido. Use x,y,z.", parent=d)
+                    entry_center.focus_set()
+                    return
+
+            # direção só quando eixo é arbitrário
+            if axis == "arbitrary":
+                try:
+                    dx, dy, dz = map(float, entry_dir.get().strip().split(","))
+                    direction = (dx, dy, dz)
+                except Exception:
+                    messagebox.showerror("Erro", "Direção inválida. Use dx,dy,dz.", parent=d)
+                    entry_dir.focus_set()
+                    return
+
+            result.update(ok=True, reference=ref, axis=axis, angle=angle, center=center, direction=direction)
+            d.destroy()
+
+        def cancel():
+            d.destroy()
+
+        tk.Button(btns, text="Cancelar", command=cancel).pack(side="left", padx=6)
+        tk.Button(btns, text="Rotacionar", command=accept).pack(side="right", padx=6)
+
+        # atalhos convenientes
+        d.bind("<Return>", lambda *_: accept())
+        d.bind("<Escape>", lambda *_: cancel())
+
+        d.wait_window()
+        return result
 
     def _window_center_3d(self):
         cx = (self.window.x_min + self.window.x_max) / 2.0
@@ -944,3 +1053,104 @@ class GraphicSystem:
 
         self.refresh_listbox()
         self.redraw()
+
+    # ---- Helpers para clipping correto com janela possivelmente rotacionada ----
+    def _rotate_point(self, x, y, ang_deg, cx, cy):
+        import math
+        a = math.radians(ang_deg)
+        ca, sa = math.cos(a), math.sin(a)
+        xr, yr = x - cx, y - cy
+        return (xr * ca - yr * sa + cx, xr * sa + yr * ca + cy)
+
+    # Clipping para pontos 
+    def _clip_point_world(self, x, y):
+        cx = (self.window.x_min + self.window.x_max) / 2.0
+        cy = (self.window.y_min + self.window.y_max) / 2.0
+        ang = self.window.rotation_angle
+        if abs(ang) > 1e-9:
+            xr, yr = self._rotate_point(x, y, +ang, cx, cy)  # mesmo sentido
+            res = clip_point(xr, yr, self.window)
+            if res is None:
+                return None
+            wx, wy = self._rotate_point(res[0], res[1], -ang, cx, cy)
+            return (wx, wy)
+        else:
+            res = clip_point(x, y, self.window)
+        return (x, y) if res is not None else None
+
+
+    # Clipping para retas respeitando as coordenadas de mundo e rotação de janela
+    def _clip_line_world(self, p1, p2):
+        # Centro da window (para rotacionar em torno dele)
+        cx = (self.window.x_min + self.window.x_max) / 2.0
+        cy = (self.window.y_min + self.window.y_max) / 2.0
+        ang = self.window.rotation_angle
+
+        # Des-rotaciona os pontos para alinhar com os eixos da janela
+        if abs(ang) > 1e-9:
+            q1 = self._rotate_point(p1[0], p1[1], +ang, cx, cy)
+            q2 = self._rotate_point(p2[0], p2[1], +ang, cx, cy)
+            # cria uma "cópia" rasa da janela (mesmos limites)
+            class _TmpW: pass
+            w = _TmpW()
+            w.x_min, w.x_max = self.window.x_min, self.window.x_max
+            w.y_min, w.y_max = self.window.y_min, self.window.y_max
+
+            if self.clipping_mode == "CS":
+                clipped = cohen_sutherland(q1[0], q1[1], q2[0], q2[1], w)
+            else:
+                clipped = liang_barsky(q1[0], q1[1], q2[0], q2[1], w)
+
+            if not clipped:
+                return None
+
+            x1c, y1c, x2c, y2c = clipped
+            # re-rotaciona de volta para o mundo
+            r1 = self._rotate_point(x1c, y1c, -ang, cx, cy)
+            r2 = self._rotate_point(x2c, y2c, -ang, cx, cy)
+            return (r1[0], r1[1], r2[0], r2[1])
+        else:
+            # janela não-rotacionada: clipping direto
+            if self.clipping_mode == "CS":
+                return cohen_sutherland(p1[0], p1[1], p2[0], p2[1], self.window)
+            else:
+                return liang_barsky(p1[0], p1[1], p2[0], p2[1], self.window)
+            
+    # Clipping para polígonos/wireframes respeitando as coordenadas de mundo e rotação de janela
+    def _clip_polygon_world(self, points):
+        if not points:
+            return []
+
+        cx = (self.window.x_min + self.window.x_max) / 2.0
+        cy = (self.window.y_min + self.window.y_max) / 2.0
+        ang = self.window.rotation_angle
+
+        # Se houver rotação: leva pro espaço alinhado à janela
+        if abs(ang) > 1e-9:
+            pts_local = [self._rotate_point(x, y, +ang, cx, cy) for (x, y) in points]
+
+            class _TmpW: pass
+            w = _TmpW()
+            w.x_min, w.x_max = self.window.x_min, self.window.x_max
+            w.y_min, w.y_max = self.window.y_min, self.window.y_max
+
+            clipped_local = sutherland_hodgman(pts_local, w)
+            if not clipped_local:
+                return []
+
+            # Volta pro mundo rotacionando de novo
+            return [self._rotate_point(x, y, -ang, cx, cy) for (x, y) in clipped_local]
+
+        # Sem rotação: pode usar a window direto
+        return sutherland_hodgman(points, self.window) or []
+
+
+    def _draw_clipped_world_segment(self, x1, y1, x2, y2, color):
+        clipped = self._clip_line_world((x1, y1), (x2, y2))
+        if not clipped:
+            return
+        cx1, cy1, cx2, cy2 = clipped
+        v1 = self.viewport.world_to_viewport(cx1, cy1)
+        v2 = self.viewport.world_to_viewport(cx2, cy2)
+        self.canvas.create_line(v1, v2, fill=color)
+    

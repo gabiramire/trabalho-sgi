@@ -1,4 +1,3 @@
-# clipping.py
 INSIDE, LEFT, RIGHT, BOTTOM, TOP = 0, 1, 2, 4, 8
 
 
@@ -17,7 +16,6 @@ def compute_out_code(x, y, window):
 
 # -- Clipping de Pontos --
 def clip_point(x, y, window):
-    """Retorna (x, y) se o ponto está dentro da window, caso contrário None"""
     if window.x_min <= x <= window.x_max and window.y_min <= y <= window.y_max:
         return (x, y)
     return None
