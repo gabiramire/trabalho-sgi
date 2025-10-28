@@ -6,7 +6,7 @@ from .bezier_curve import bezier_curve, bezier_multisegment
 from .bezier_surface import generate_surface_grid
 from .bspline_fd import evaluate_bspline_fd
 from .clipping import clip_point, cohen_sutherland, liang_barsky, sutherland_hodgman
-from .obj_descriptor import DescritorOBJ
+from .descriptor_obj import DescritorOBJ 
 from .objects import (
     CURVE,
     LINE,
@@ -1062,24 +1062,19 @@ class GraphicSystem:
             if not filename:
                 return
 
-        # monta a cena heterogênea (2D, 3D, superfícies…)
-        try:
-            from .obj_descriptor import DescritorOBJ
-        except Exception:
-            from .descritor_obj import DescritorOBJ  # caso teu arquivo tenha outro nome
-
+        # Usa o parser fixo (já importado no topo)
         lines = DescritorOBJ.export_scene(self.display.objects)
 
         with open(filename, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
 
     # Carregar .obj
-    def load_from_obj(self, filename=None):
+    def load_from_obj(self, filename=None, append: bool = False):
         if filename is None:
             filename = filedialog.askopenfilename(
                 defaultextension=".obj",
                 filetypes=[("Wavefront OBJ", "*.obj")],
-                title="Abrir mundo .obj",
+                title=("Importar OBJ (adicionar)" if append else "Abrir mundo .obj"),
             )
             if not filename:
                 return
@@ -1087,13 +1082,28 @@ class GraphicSystem:
         with open(filename, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
+        # limpa só se NÃO for append
+        if not append:
+            try:
+                if hasattr(self.display, "clear"):
+                    self.display.clear()
+                else:
+                    self.display.objects.clear()
+                if hasattr(self, "selected_index"):
+                    self.selected_index = None
+            except Exception:
+                pass
+
         objects = DescritorOBJ.import_all(lines, color_3d=self.default_color)
 
         for obj in objects:
             self.display.add(obj)
 
+        print(f"[OBJ] Carregado: {len(objects)} objetos de {filename} | append={append}")
         self.refresh_listbox()
         self.redraw()
+
+
 
     # Recebe Point3D OU tupla (x,y,z) e devolve (x2d, y2d) no espaço de MUNDO 2D
     def _project3d_to2d_world(self, p3):
