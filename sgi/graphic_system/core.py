@@ -1051,6 +1051,7 @@ class GraphicSystem:
             self.refresh_listbox()
             self.redraw()
 
+    # Salvar .obj
     def save_as_obj(self, filename=None):
         if filename is None:
             filename = filedialog.asksaveasfilename(
@@ -1061,15 +1062,18 @@ class GraphicSystem:
             if not filename:
                 return
 
-        lines = []
-        offset = 1
-        for obj in self.display.objects:
-            obj_lines, offset = DescritorOBJ.export_object(obj, offset)
-            lines.extend(obj_lines)
+        # monta a cena heterogênea (2D, 3D, superfícies…)
+        try:
+            from .obj_descriptor import DescritorOBJ
+        except Exception:
+            from .descritor_obj import DescritorOBJ  # caso teu arquivo tenha outro nome
+
+        lines = DescritorOBJ.export_scene(self.display.objects)
 
         with open(filename, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
 
+    # Carregar .obj
     def load_from_obj(self, filename=None):
         if filename is None:
             filename = filedialog.askopenfilename(
