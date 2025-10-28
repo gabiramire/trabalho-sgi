@@ -255,8 +255,6 @@ class BezierSurface(Object3D):
 
 
 # Classe de superfície B-spline cúbica uniforme
-# --- Superfícies (corrigidas) ---
-
 class BezierPatch(Object3D):
     def __init__(self, name, control_grid, color="black", nu=10, nv=10):
         # edges=[] (superfície não usa arestas para desenhar)

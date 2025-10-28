@@ -112,7 +112,7 @@ def create_object_choice(menu_frame, system, canvas):
 
     cont_g0 = tk.Radiobutton(
         menu_frame,
-        text="Multi-segmentada G(0)",
+        text="Bézier Multi-segmentada G(0)",
         variable=system.curve_mode_var,
         value="G0",
         command=lambda: system.set_curve_mode(system.curve_mode_var.get()),
@@ -120,7 +120,7 @@ def create_object_choice(menu_frame, system, canvas):
 
     cont_g1 = tk.Radiobutton(
         menu_frame,
-        text="Contínua G(1)",
+        text="Bézier Contínua G(1)",
         variable=system.curve_mode_var,
         value="G1",
         command=lambda: system.set_curve_mode(system.curve_mode_var.get()),
@@ -128,7 +128,7 @@ def create_object_choice(menu_frame, system, canvas):
 
     cont_g2 = tk.Radiobutton(
         menu_frame,
-        text="B-Splines",
+        text="B-Spline",
         variable=system.curve_mode_var,
         value="BS",
         command=lambda: system.set_curve_mode(system.curve_mode_var.get()),
@@ -175,6 +175,7 @@ def create_object_choice(menu_frame, system, canvas):
             btn_wireframe3d,
             btn_createcube3d,
             btn_surface3d,
+            btn_surface3d_bspline
         ]
         for widget in widgets:
             widget.pack_forget()

@@ -22,10 +22,8 @@ def _is_float(s: str) -> bool:
         return False
 
 
-# =================
-# = Descritor OBJ =
-# =================
 
+# Descritor OBJ 
 class DescritorOBJ:
     # Objetos 2D: export de pontos, linhas, wireframes e curvas
     @staticmethod
