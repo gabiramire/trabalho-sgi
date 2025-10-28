@@ -21,11 +21,23 @@ def _is_float(s: str) -> bool:
     except Exception:
         return False
 
+# utilitários de importação/exportação OBJ
+def _resolve_index(idx: int, nverts: int) -> int:
+    return idx if idx > 0 else (nverts + 1 + idx)
+
+# Splita token 'v/vt/vn' ou similares, retornando apenas o índice de vértice 'v'.
+def _split_v_token(tok: str) -> int:
+    """
+    Em l/f, cada token pode ser 'v', 'v/vt', 'v//vn' ou 'v/vt/vn'.
+    Queremos apenas o índice de vértice 'v'.
+    """
+    return int(tok.split("/")[0])
 
 
-# Descritor OBJ 
+# Descritor OBJ
 class DescritorOBJ:
-    # Objetos 2D: export de pontos, linhas, wireframes e curvas
+    
+    # 2D: export/import (pontos, linhas, wireframes, curvas)
     @staticmethod
     def export_object(obj: Object2D, index_offset: int = 1) -> Tuple[List[str], int]:
         lines: List[str] = []
@@ -59,13 +71,10 @@ class DescritorOBJ:
             # curva Bezier 2D (free-form)
             npts = len(obj.coordinates)
             if npts < 2:
-                # exporta como polyline trivial
                 idxs = [str(i) for i in range(index_offset, index_offset + npts)]
                 lines.append("l " + " ".join(idxs))
                 next_offset = index_offset + npts
             else:
-                # exporta como free-form bezier: cstype/deg/curv
-                # grau = npts-1
                 deg = max(1, npts - 1)
                 u0, u1 = 0.0, 1.0
                 lines.append("cstype bezier")
@@ -75,32 +84,37 @@ class DescritorOBJ:
                 lines.append("end")
                 next_offset = index_offset + npts
         else:
-            # objeto desconhecido 2D: apenas verte e não cria elemento
+            # objeto desconhecido 2D: apenas vértices
             next_offset = index_offset + len(obj.coordinates)
 
         return lines, next_offset
 
-    # Objetos 2D: import de pontos, linhas, wireframes e curvas
     @staticmethod
     def import_objects(lines: List[str]) -> List[Object2D]:
         objects: List[Object2D] = []
-        vertices2d: List[Tuple[float, float]] = []  # 0-based (armazenamos em lista 0-based)
+        vertices2d: List[Tuple[float, float]] = []  # 0-based
         current_name: Optional[str] = None
 
         # estado para curva 2D free-form
         cstype_bezier = False
+        curve_deg = None
         pending_curves: List[List[int]] = []  # cada entrada é a lista de índices 1-based
 
         def flush_curve_2d_blocks():
             nonlocal pending_curves, current_name
             for idxs in pending_curves:
-                coords = [vertices2d[i - 1] for i in idxs]
+                # resolve índices relativos em 2D
+                n = len(vertices2d)
+                res = [_resolve_index(i, n) for i in idxs]
+                coords = [vertices2d[i - 1] for i in res]
                 objects.append(Object2D(current_name or "Curva2D", CURVE, coords))
             pending_curves = []
 
         def flush_polyline(name: Optional[str], idxs: List[int]):
-            coords = [vertices2d[i - 1] for i in idxs]
-            obj_type = DescritorOBJ._infer_type(idxs)
+            n = len(vertices2d)
+            res = [_resolve_index(i, n) for i in idxs]
+            coords = [vertices2d[i - 1] for i in res]
+            obj_type = DescritorOBJ._infer_type(res)
             objects.append(Object2D(name or "Objeto2D", obj_type, coords))
 
         for raw in lines:
@@ -110,17 +124,23 @@ class DescritorOBJ:
             parts = s.split()
             kw = parts[0].lower()
 
-            if kw == "o":
-                # novo objeto: limpa curvas pendentes
+            if kw in ("o", "g"):
+                # novo objeto/grupo: fecha curvas pendentes
                 flush_curve_2d_blocks()
-                current_name = s[2:].strip() or None
+                # usa o texto após 'o ' ou 'g ' como nome, se houver
+                nm = s[len(kw) + 1 :].strip()
+                current_name = nm or current_name
 
             elif kw == "v":
-                # pode ser 2D (x,y) ou 3D (x,y,z) – aqui, só coleto se for 2D
-                if len(parts) == 3 and _is_float(parts[1]) and _is_float(parts[2]):
+                # aceita v x y  [z opcional]
+                if len(parts) >= 3 and _is_float(parts[1]) and _is_float(parts[2]):
                     x, y = float(parts[1]), float(parts[2])
                     vertices2d.append((x, y))
-                # se for 3D, ignora na importação 2D
+
+            elif kw == "vp" and len(parts) >= 3 and _is_float(parts[1]) and _is_float(parts[2]):
+                # opcional: tratar vp (param) como (u,v) 2D
+                u, v = float(parts[1]), float(parts[2])
+                vertices2d.append((u, v))
 
             elif kw == "p":
                 flush_curve_2d_blocks()
@@ -129,16 +149,17 @@ class DescritorOBJ:
 
             elif kw == "l":
                 flush_curve_2d_blocks()
-                idxs = [int(p) for p in parts[1:]]
+                # l i j k ... (pode ter i//vn, etc.)
+                idxs = [_split_v_token(p) for p in parts[1:]]
                 flush_polyline(current_name, idxs)
 
             elif kw == "cstype":
                 # ativa modo curva Bezier 2D
-                cstype_bezier = any(p.lower() == "bezier" for p in parts[1:])
+                modes = [p.lower() for p in parts[1:]]
+                cstype_bezier = ("bezier" in modes)
 
             elif kw == "deg":
                 if cstype_bezier and len(parts) >= 2:
-                    # em curvas 2D, "deg N"
                     curve_deg = int(parts[1])
 
             elif kw == "curv":
@@ -157,7 +178,6 @@ class DescritorOBJ:
         flush_curve_2d_blocks()
         return objects
 
-    # checa o tipo baseado pela quantidade de índices
     @staticmethod
     def _infer_type(indices: List[int]) -> str:
         if len(indices) == 1:
@@ -167,7 +187,8 @@ class DescritorOBJ:
         else:
             return WIREFRAME
 
-    # Objetos 3D: importa Wireframes 3D
+
+    # 3D: wireframes (v/l/f)
     @staticmethod
     def import_objects_3d(lines: List[str], color: str = "#000000") -> List[Object3D]:
         objects: List[Object3D] = []
@@ -188,31 +209,35 @@ class DescritorOBJ:
             parts = s.split()
             kw = parts[0].lower()
 
-            if kw == "o":
+            if kw in ("o", "g"):
                 flush()
-                curr_name = s[2:].strip() or "Object3D"
+                nm = s[len(kw) + 1 :].strip()
+                curr_name = nm or "Object3D"
 
             elif kw == "v" and len(parts) >= 4:
                 x, y, z = float(parts[1]), float(parts[2]), float(parts[3])
                 verts.append(Point3D(x, y, z))
 
             elif kw == "l":
-                idx = list(map(int, parts[1:]))
+                rawidx = parts[1:]
+                n = len(verts) - 1
+                idx = [_resolve_index(_split_v_token(p), n) for p in rawidx]
                 for a, b in zip(idx, idx[1:]):
                     curr_edges.append((verts[a], verts[b]))
 
             elif kw == "f":
-                # face -> ciclo de arestas
-                idx = [int(p.split("/")[0]) for p in parts[1:]]
-                n = len(idx)
-                for i in range(n):
-                    a, b = idx[i], idx[(i + 1) % n]
+                rawidx = parts[1:]
+                n = len(verts) - 1
+                idx = [_resolve_index(_split_v_token(p), n) for p in rawidx]
+                m = len(idx)
+                for i in range(m):
+                    a, b = idx[i], idx[(i + 1) % m]
                     curr_edges.append((verts[a], verts[b]))
 
         flush()
         return objects
 
-    # Objetos 3D: importa Superfícies Bézier
+    # 3D: Superfícies Bézier e B-spline
     @staticmethod
     def import_bezier_surfaces(
         lines: List[str],
@@ -224,7 +249,7 @@ class DescritorOBJ:
         surfaces: List[BezierSurface] = []
 
         current_name: Optional[str] = None
-        cstype_bezier = False
+        cstype_ok = False  # bezier ou bspline aceitos
         du = dv = None
         current_patches: List[BezierPatch] = []
 
@@ -242,32 +267,41 @@ class DescritorOBJ:
             parts = s.split()
             kw = parts[0].lower()
 
-            if kw == "o":
+            if kw in ("o", "g"):
                 # fecha superfície anterior
                 flush_surface()
-                current_name = s[2:].strip() or None
+                nm = s[len(kw) + 1 :].strip()
+                current_name = nm or current_name
 
             elif kw == "v" and len(parts) >= 4:
                 x, y, z = map(float, parts[1:4])
                 verts.append(Point3D(x, y, z))
 
             elif kw == "cstype":
-                cstype_bezier = any(p.lower() == "bezier" for p in parts[1:])
+                modes = [p.lower() for p in parts[1:]]
+                # aceitamos bezier OU bspline (didático)
+                cstype_ok = ("bezier" in modes) or ("bspline" in modes)
 
             elif kw == "deg":
-                # para superfícies esperamos "deg 3 3"
                 if len(parts) >= 3:
                     du, dv = int(parts[1]), int(parts[2])
 
             elif kw == "surf":
-                if not cstype_bezier or (du, dv) != (3, 3):
-                    raise ValueError("Apenas superfícies Bezier com deg 3 3 são suportadas.")
+                # suportamos 'surf u0 u1 v0 v1 i1 ... i16'
+                if not cstype_ok or (du, dv) != (3, 3):
+                    # fora de escopo do curso
+                    continue
                 if len(parts) < 5 + 16:
-                    raise ValueError("Linha 'surf' precisa 4 limites + 16 índices (1-based).")
-                # u0, u1, v0, v1 = map(float, parts[1:5])  # não usado
-                idxs = list(map(int, parts[5:5 + 16]))
-                if any(i <= 0 or i >= len(verts) for i in idxs):
-                    raise ValueError("Índice de vértice fora do intervalo.")
+                    # sem 16 índices não é patch bicúbico
+                    continue
+
+                # lê índices (resolvendo relativos)
+                n = len(verts) - 1
+                rawidx = parts[5 : 5 + 16]
+                idxs = [_resolve_index(int(p), n) for p in rawidx]
+                if any(i <= 0 or i > n for i in idxs):
+                    continue
+
                 # monta grid 4x4 linha-a-linha
                 control = []
                 for r in range(4):
@@ -286,14 +320,13 @@ class DescritorOBJ:
                 )
 
             elif kw == "end":
-                cstype_bezier = False
+                cstype_ok = False
                 du = dv = None
 
         # flush final
         flush_surface()
         return surfaces
 
-    # Objetos 3D: exporta Superfícies Bézier
     @staticmethod
     def export_bezier_surface(
         surface: BezierSurface,
@@ -312,10 +345,10 @@ class DescritorOBJ:
                     lines.append(f"v {P.x:.6f} {P.y:.6f} {P.z:.6f}")
                     vcount += 1
 
+        # por compat: exportamos como 'bezier 3 3'
         lines.append("cstype bezier")
         lines.append("deg 3 3")
 
-        # linhas 'surf' – 16 índices por patch, sequenciais
         u0, u1, v0, v1 = 0, 1, 0, 1
         acc = 0
         for _patch in surface.patches:
@@ -327,10 +360,10 @@ class DescritorOBJ:
         next_offset = vstart + vcount
         return lines, next_offset
 
-    # método principal de importação, unindo as 3 lógicas
+
+    # Mestre: função principal
     @staticmethod
     def import_all(lines: List[str], color_3d: str = "#000000") -> List[Union[Object2D, Object3D]]:
-        
         out: List[Union[Object2D, Object3D]] = []
 
         # 2D
@@ -345,7 +378,7 @@ class DescritorOBJ:
         except Exception:
             pass
 
-        # Superfícies Bezier (são Object3D, pois BezierSurface herda de Object3D)
+        # Superfícies Bezier (e bspline 3x3 didática)
         try:
             out.extend(DescritorOBJ.import_bezier_surfaces(lines, color=color_3d))
         except Exception:
