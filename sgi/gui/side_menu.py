@@ -14,12 +14,14 @@ from graphic_system.objects import (
 
 # Ajuste de side menu, tamanho conforme conteudo
 def create_side_menu(root, main_frame, system):
+    sidebar_width = 250  # largura "agradável" para não estourar a UI
+
     # === CONTÊINER LATERAL ===
     side_frame = tk.Frame(root)
     side_frame.pack(side=tk.LEFT, fill=tk.Y)
 
     # === CANVAS + SCROLL ===
-    canvas = tk.Canvas(side_frame, highlightthickness=0)
+    canvas = tk.Canvas(side_frame, width=sidebar_width)
     canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=5, padx=5)
 
     scrollbar = tk.Scrollbar(side_frame, orient="vertical", command=canvas.yview)
@@ -29,10 +31,6 @@ def create_side_menu(root, main_frame, system):
     # Frame interno real de conteúdo
     menu_frame = tk.Frame(canvas)
     inner_id = canvas.create_window((0, 0), window=menu_frame, anchor="nw")
-
-    # ====== SCROLL REGION + LARGURA RESPONSIVA ======
-    SIDEBAR_MIN = 260    # largura mínima "agradável"
-    SIDEBAR_MAX = 560    # largura máxima para não estourar a UI
 
     def _sync_width():
         # largura visível do canvas (desconta a barra se estiver visível)
@@ -44,7 +42,7 @@ def create_side_menu(root, main_frame, system):
                 pass
         # clamp: respeita min/max e conteúdo
         req = menu_frame.winfo_reqwidth()
-        target = max(SIDEBAR_MIN, min(SIDEBAR_MAX, max(req, visible_w)))
+        target = max(sidebar_width, max(req, visible_w))
         canvas.itemconfigure(inner_id, width=target)
         # atualiza wrap de labels que precisam quebrar linha
         for lbl in getattr(menu_frame, "_wrap_targets", []):
@@ -216,7 +214,7 @@ def create_object_choice(menu_frame, system, canvas):
             btn_wireframe3d,
             btn_createcube3d,
             btn_surface3d,
-            btn_surface3d_bspline
+            btn_surface3d_bspline,
         ]
         for widget in widgets:
             widget.pack_forget()
@@ -545,38 +543,54 @@ def create_bspline_surface3d_dialog(menu_frame, system):
     dialog.title("Superfície B-Spline 3D por Forward Differences (malha 4×4…20×20)")
 
     # --- Nome
-    tk.Label(dialog, text="Nome do objeto:").grid(row=0, column=0, sticky="w", padx=6, pady=6)
+    tk.Label(dialog, text="Nome do objeto:").grid(
+        row=0, column=0, sticky="w", padx=6, pady=6
+    )
     entry_name = tk.Entry(dialog, width=28)
     entry_name.insert(0, "BSplineSurface")
     entry_name.grid(row=0, column=1, sticky="we", padx=6, pady=6)
 
     # --- nu, nv (divisões por PATCH, não pela malha inteira)
-    tk.Label(dialog, text="Divisões nu × nv por patch:").grid(row=1, column=0, sticky="w", padx=6, pady=6)
-    frame_n = tk.Frame(dialog); frame_n.grid(row=1, column=1, sticky="w", padx=6, pady=6)
-    entry_nu = tk.Entry(frame_n, width=6); entry_nu.insert(0, "12")
+    tk.Label(dialog, text="Divisões nu × nv por patch:").grid(
+        row=1, column=0, sticky="w", padx=6, pady=6
+    )
+    frame_n = tk.Frame(dialog)
+    frame_n.grid(row=1, column=1, sticky="w", padx=6, pady=6)
+    entry_nu = tk.Entry(frame_n, width=6)
+    entry_nu.insert(0, "12")
     tk.Label(frame_n, text="×").pack(side=tk.LEFT, padx=4)
-    entry_nv = tk.Entry(frame_n, width=6); entry_nv.insert(0, "12")
-    entry_nu.pack(side=tk.LEFT); entry_nv.pack(side=tk.LEFT)
+    entry_nv = tk.Entry(frame_n, width=6)
+    entry_nv.insert(0, "12")
+    entry_nu.pack(side=tk.LEFT)
+    entry_nv.pack(side=tk.LEFT)
 
     # --- Cor
     color_var = tk.StringVar(value=system.default_color)
+
     def choose_color():
         c = tk.colorchooser.askcolor(title="Cor da superfície")[1]
-        if c: color_var.set(c)
+        if c:
+            color_var.set(c)
+
     tk.Label(dialog, text="Cor:").grid(row=2, column=0, sticky="w", padx=6, pady=6)
-    frame_color = tk.Frame(dialog); frame_color.grid(row=2, column=1, sticky="w", padx=6, pady=6)
+    frame_color = tk.Frame(dialog)
+    frame_color.grid(row=2, column=1, sticky="w", padx=6, pady=6)
     tk.Entry(frame_color, textvariable=color_var, width=14).pack(side=tk.LEFT)
-    tk.Button(frame_color, text="Escolher…", command=choose_color).pack(side=tk.LEFT, padx=6)
+    tk.Button(frame_color, text="Escolher…", command=choose_color).pack(
+        side=tk.LEFT, padx=6
+    )
 
     # --- Instruções
     tk.Label(
         dialog,
-        text=("Pontos de controle de uma malha m×n (4…20), linhas separadas por ';'.\n"
-              "Ex.: (0,0,0),(10,0,0),(20,0,0),(30,0,0);\n"
-              "     (0,10,0),(10,10,8),(20,10,8),(30,10,0);\n"
-              "     (0,20,0),(10,20,8),(20,20,8),(30,20,0);\n"
-              "     (0,30,0),(10,30,0),(20,30,0),(30,30,0)")
-    ).grid(row=3, column=0, columnspan=2, sticky="w", padx=6, pady=(6,2))
+        text=(
+            "Pontos de controle de uma malha m×n (4…20), linhas separadas por ';'.\n"
+            "Ex.: (0,0,0),(10,0,0),(20,0,0),(30,0,0);\n"
+            "     (0,10,0),(10,10,8),(20,10,8),(30,10,0);\n"
+            "     (0,20,0),(10,20,8),(20,20,8),(30,20,0);\n"
+            "     (0,30,0),(10,30,0),(20,30,0),(30,30,0)"
+        ),
+    ).grid(row=3, column=0, columnspan=2, sticky="w", padx=6, pady=(6, 2))
 
     # --- Caixa de texto
     txt = tk.Text(dialog, width=64, height=14)
@@ -616,7 +630,7 @@ def create_bspline_surface3d_dialog(menu_frame, system):
                     raise ValueError("Número de colunas deve ser entre 4 e 20.")
             elif len(pts) != n_expected:
                 raise ValueError("Todas as linhas devem ter o mesmo número de pontos.")
-            control.append([Point3D(float(x), float(y), float(z)) for (x,y,z) in pts])
+            control.append([Point3D(float(x), float(y), float(z)) for (x, y, z) in pts])
         return control  # List[List[Point3D]]
 
     def on_create():
@@ -625,12 +639,16 @@ def create_bspline_surface3d_dialog(menu_frame, system):
             nu = max(1, int(entry_nu.get().strip()))
             nv = max(1, int(entry_nv.get().strip()))
         except Exception:
-            tk.messagebox.showerror("Erro", "nu e nv devem ser inteiros ≥ 1.", parent=dialog)
+            tk.messagebox.showerror(
+                "Erro", "nu e nv devem ser inteiros ≥ 1.", parent=dialog
+            )
             return
 
         raw = txt.get("1.0", "end").strip()
         if not raw:
-            tk.messagebox.showerror("Erro", "Informe a malha m×n de pontos.", parent=dialog)
+            tk.messagebox.showerror(
+                "Erro", "Informe a malha m×n de pontos.", parent=dialog
+            )
             return
 
         try:
@@ -640,9 +658,13 @@ def create_bspline_surface3d_dialog(menu_frame, system):
             return
 
         try:
-            surf = BSplineSurface(name, control_grid, color=color_var.get(), nu=nu, nv=nv)
+            surf = BSplineSurface(
+                name, control_grid, color=color_var.get(), nu=nu, nv=nv
+            )
         except Exception as e:
-            tk.messagebox.showerror("Erro", f"Falha ao criar superfície:\n{e}", parent=dialog)
+            tk.messagebox.showerror(
+                "Erro", f"Falha ao criar superfície:\n{e}", parent=dialog
+            )
             return
 
         system.display.add(surf)
@@ -651,11 +673,13 @@ def create_bspline_surface3d_dialog(menu_frame, system):
         dialog.destroy()
 
     # botões
-    btns = tk.Frame(dialog); btns.grid(row=5, column=0, columnspan=2, pady=8)
+    btns = tk.Frame(dialog)
+    btns.grid(row=5, column=0, columnspan=2, pady=8)
     tk.Button(btns, text="Cancelar", command=dialog.destroy).pack(side=tk.LEFT, padx=6)
-    tk.Button(btns, text="Criar Superfície", command=on_create).pack(side=tk.LEFT, padx=6)
+    tk.Button(btns, text="Criar Superfície", command=on_create).pack(
+        side=tk.LEFT, padx=6
+    )
     dialog.bind("<Return>", lambda *_: on_create())
-
 
 
 def create_default_color(menu_frame, system):
@@ -881,7 +905,7 @@ def create_window3d_controls(menu_frame, system):
     btn_rotate_right.pack(side=tk.LEFT, padx=2)
 
     rotate_3d_frame = tk.Frame(window3d_frame)
-    rotate_3d_frame.pack(pady=5, fill=tk.X, padx=5)
+    rotate_3d_frame.pack(pady=5)
 
     tk.Label(rotate_3d_frame, text="Rotação 3D").grid(row=0, column=0, columnspan=4)
     btn_rotate_3d_up = tk.Button(
