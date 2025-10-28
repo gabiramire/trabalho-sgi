@@ -14,14 +14,14 @@ def compute_out_code(x, y, window):
     return code
 
 
-# -- Clipping de Pontos --
+# Clipping de Pontos
 def clip_point(x, y, window):
     if window.x_min <= x <= window.x_max and window.y_min <= y <= window.y_max:
         return (x, y)
     return None
 
 
-# -- Clipping de Retas --
+# Clipping de Retas
 def cohen_sutherland(x1, y1, x2, y2, window):
     out1 = compute_out_code(x1, y1, window)
     out2 = compute_out_code(x2, y2, window)
@@ -83,7 +83,7 @@ def liang_barsky(x1, y1, x2, y2, window):
     return (x1 + u1 * dx, y1 + u1 * dy, x1 + u2 * dx, y1 + u2 * dy)
 
 
-# -- Clipping de Polígonos --
+# Clipping de Polígonos
 def sutherland_hodgman(polygon, window):
     def inside(p, edge):
         x, y = p
