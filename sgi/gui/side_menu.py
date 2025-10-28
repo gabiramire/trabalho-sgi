@@ -7,6 +7,7 @@ from graphic_system.objects import (
     WIREFRAME,
     BezierPatch,
     BezierSurface,
+    BSplineSurface,
     options_label,
 )
 
@@ -17,7 +18,7 @@ def create_side_menu(root, main_frame, system):
     side_frame.pack(side=tk.LEFT, fill=tk.Y)
 
     # Canvas para permitir o scroll
-    canvas = tk.Canvas(side_frame, width=250)
+    canvas = tk.Canvas(side_frame, width=500)
     canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=5, padx=5)
 
     # Scrollbar vertical
@@ -148,7 +149,13 @@ def create_object_choice(menu_frame, system, canvas):
     btn_surface3d = tk.Button(
         menu_frame,
         text="Superfície Bézier 3D",
-        command=lambda: create_surface3d_dialog(menu_frame, system),
+        command=lambda: create_bezier_surface3d_dialog(menu_frame, system),
+    )
+
+    btn_surface3d_bspline = tk.Button(
+        menu_frame,
+        text="Superfície B-Spline 3D",
+        command=lambda: create_bspline_surface3d_dialog(menu_frame, system),
     )
 
     def set_type(*args):
@@ -184,6 +191,7 @@ def create_object_choice(menu_frame, system, canvas):
             btn_wireframe3d.pack(pady=6, fill=tk.X, after=type_menu)
             btn_createcube3d.pack(pady=6, fill=tk.X, after=type_menu)
             btn_surface3d.pack(pady=6, fill=tk.X, after=btn_wireframe3d)
+            btn_surface3d_bspline.pack(pady=6, fill=tk.X, after=btn_surface3d)
 
         update_scrollregion()
 
@@ -371,7 +379,7 @@ def start_wireframe3d(name, num_edges, menu_frame, system):
     dialog.after(50, lambda: canvas.configure(scrollregion=canvas.bbox("all")))
 
 
-def create_surface3d_dialog(menu_frame, system):
+def create_bezier_surface3d_dialog(menu_frame, system):
     dialog = tk.Toplevel(menu_frame)
     dialog.title("Superfície Bézier 3D (4x4 por patch)")
 
@@ -488,6 +496,124 @@ def create_surface3d_dialog(menu_frame, system):
         side=tk.LEFT, padx=6
     )
     dialog.bind("<Return>", lambda *_: on_create())
+
+
+def create_bspline_surface3d_dialog(menu_frame, system):
+    dialog = tk.Toplevel(menu_frame)
+    dialog.title("Superfície B-Spline 3D por Forward Differences (malha 4×4…20×20)")
+
+    # --- Nome
+    tk.Label(dialog, text="Nome do objeto:").grid(row=0, column=0, sticky="w", padx=6, pady=6)
+    entry_name = tk.Entry(dialog, width=28)
+    entry_name.insert(0, "BSplineSurface")
+    entry_name.grid(row=0, column=1, sticky="we", padx=6, pady=6)
+
+    # --- nu, nv (divisões por PATCH, não pela malha inteira)
+    tk.Label(dialog, text="Divisões nu × nv por patch:").grid(row=1, column=0, sticky="w", padx=6, pady=6)
+    frame_n = tk.Frame(dialog); frame_n.grid(row=1, column=1, sticky="w", padx=6, pady=6)
+    entry_nu = tk.Entry(frame_n, width=6); entry_nu.insert(0, "12")
+    tk.Label(frame_n, text="×").pack(side=tk.LEFT, padx=4)
+    entry_nv = tk.Entry(frame_n, width=6); entry_nv.insert(0, "12")
+    entry_nu.pack(side=tk.LEFT); entry_nv.pack(side=tk.LEFT)
+
+    # --- Cor
+    color_var = tk.StringVar(value=system.default_color)
+    def choose_color():
+        c = tk.colorchooser.askcolor(title="Cor da superfície")[1]
+        if c: color_var.set(c)
+    tk.Label(dialog, text="Cor:").grid(row=2, column=0, sticky="w", padx=6, pady=6)
+    frame_color = tk.Frame(dialog); frame_color.grid(row=2, column=1, sticky="w", padx=6, pady=6)
+    tk.Entry(frame_color, textvariable=color_var, width=14).pack(side=tk.LEFT)
+    tk.Button(frame_color, text="Escolher…", command=choose_color).pack(side=tk.LEFT, padx=6)
+
+    # --- Instruções
+    tk.Label(
+        dialog,
+        text=("Pontos de controle de uma malha m×n (4…20), linhas separadas por ';'.\n"
+              "Ex.: (0,0,0),(10,0,0),(20,0,0),(30,0,0);\n"
+              "     (0,10,0),(10,10,8),(20,10,8),(30,10,0);\n"
+              "     (0,20,0),(10,20,8),(20,20,8),(30,20,0);\n"
+              "     (0,30,0),(10,30,0),(20,30,0),(30,30,0)")
+    ).grid(row=3, column=0, columnspan=2, sticky="w", padx=6, pady=(6,2))
+
+    # --- Caixa de texto
+    txt = tk.Text(dialog, width=64, height=14)
+    txt.grid(row=4, column=0, columnspan=2, sticky="nsew", padx=6, pady=6)
+
+    example = (
+        "(0,0,0),(10,0,0),(20,0,0),(30,0,0);\n"
+        "(0,10,0),(10,10,8),(20,10,8),(30,10,0);\n"
+        "(0,20,0),(10,20,8),(20,20,8),(30,20,0);\n"
+        "(0,30,0),(10,30,0),(20,30,0),(30,30,0)"
+    )
+    txt.insert("1.0", example)
+
+    # layout expandível
+    dialog.grid_rowconfigure(4, weight=1)
+    dialog.grid_columnconfigure(1, weight=1)
+
+    # --- Parser m×n (4..20)
+    POINT_RE = re.compile(
+        r"\(\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*,\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*,\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*\)"
+    )
+
+    def parse_grid_mxn(text: str):
+        rows_raw = [r.strip() for r in text.strip().split(";") if r.strip()]
+        m = len(rows_raw)
+        if m < 4 or m > 20:
+            raise ValueError("Número de linhas deve ser entre 4 e 20.")
+        control = []
+        n_expected = None
+        for r in rows_raw:
+            pts = POINT_RE.findall(r)
+            if not pts:
+                raise ValueError("Linha sem pontos válidos (formato (x,y,z)).")
+            if n_expected is None:
+                n_expected = len(pts)
+                if n_expected < 4 or n_expected > 20:
+                    raise ValueError("Número de colunas deve ser entre 4 e 20.")
+            elif len(pts) != n_expected:
+                raise ValueError("Todas as linhas devem ter o mesmo número de pontos.")
+            control.append([Point3D(float(x), float(y), float(z)) for (x,y,z) in pts])
+        return control  # List[List[Point3D]]
+
+    def on_create():
+        name = entry_name.get().strip() or "BSplineSurface"
+        try:
+            nu = max(1, int(entry_nu.get().strip()))
+            nv = max(1, int(entry_nv.get().strip()))
+        except Exception:
+            tk.messagebox.showerror("Erro", "nu e nv devem ser inteiros ≥ 1.", parent=dialog)
+            return
+
+        raw = txt.get("1.0", "end").strip()
+        if not raw:
+            tk.messagebox.showerror("Erro", "Informe a malha m×n de pontos.", parent=dialog)
+            return
+
+        try:
+            control_grid = parse_grid_mxn(raw)  # m×n (4..20)
+        except Exception as e:
+            tk.messagebox.showerror("Erro no parser", str(e), parent=dialog)
+            return
+
+        try:
+            surf = BSplineSurface(name, control_grid, color=color_var.get(), nu=nu, nv=nv)
+        except Exception as e:
+            tk.messagebox.showerror("Erro", f"Falha ao criar superfície:\n{e}", parent=dialog)
+            return
+
+        system.display.add(surf)
+        system.refresh_listbox()
+        system.redraw()
+        dialog.destroy()
+
+    # botões
+    btns = tk.Frame(dialog); btns.grid(row=5, column=0, columnspan=2, pady=8)
+    tk.Button(btns, text="Cancelar", command=dialog.destroy).pack(side=tk.LEFT, padx=6)
+    tk.Button(btns, text="Criar Superfície", command=on_create).pack(side=tk.LEFT, padx=6)
+    dialog.bind("<Return>", lambda *_: on_create())
+
 
 
 def create_default_color(menu_frame, system):

@@ -5,6 +5,7 @@ from tkinter import colorchooser, filedialog, messagebox, simpledialog
 from .bezier_curve import bezier_curve, bezier_multisegment
 from .bezier_surface import generate_surface_grid
 from .bspline_fd import evaluate_bspline_fd
+from .bspline_surface import generate_bspline_mesh
 from .clipping import clip_point, cohen_sutherland, liang_barsky, sutherland_hodgman
 from .obj_descriptor import DescritorOBJ
 from .objects import (
@@ -1105,6 +1106,26 @@ class GraphicSystem:
 
     # Desenha superfície bicúbica como uma malha
     def _draw_surface_object(self, surface_obj):
+
+        # Caso seja B-spline (tem generate_mesh)
+        if hasattr(surface_obj, "generate_mesh"):
+            grids = surface_obj.generate_mesh()
+            for grid3d in grids:
+                grid2d = [[self._project3d_to2d_world(p) for p in row] for row in grid3d]
+                # desenhe linhas u e v como já faz
+                for j in range(len(grid2d[0])):                   # v fixo, percorre u
+                    for i in range(len(grid2d)-1):
+                        x1,y1 = grid2d[i][j]
+                        x2,y2 = grid2d[i+1][j]
+                        self._draw_clipped_world_segment(x1,y1,x2,y2,surface_obj.color)
+                for i in range(len(grid2d)):                      # u fixo, percorre v
+                    for j in range(len(grid2d[0])-1):
+                        x1,y1 = grid2d[i][j]
+                        x2,y2 = grid2d[i][j+1]
+                        self._draw_clipped_world_segment(x1,y1,x2,y2,surface_obj.color)
+            return
+        
+        # Caso seja Bézier (tem patches)
         patches = []
         if hasattr(surface_obj, "patches") and surface_obj.patches:
             patches = surface_obj.patches

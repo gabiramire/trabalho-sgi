@@ -2,6 +2,7 @@ import math
 from typing import List, Tuple, Union
 
 from .point3d import Point3D
+# from .bspline_surface import generate_bspline_mesh
 
 # Tipos de objeto
 POINT = "point"
@@ -251,6 +252,77 @@ class BezierSurface(Object3D):
         self.patches = patches                   # List[BezierPatch]
         self.type = SURFACE
         self.color = color
+
+
+# Classe de superfície B-spline cúbica uniforme
+# --- Superfícies (corrigidas) ---
+
+class BezierPatch(Object3D):
+    def __init__(self, name, control_grid, color="black", nu=10, nv=10):
+        # edges=[] (superfície não usa arestas para desenhar)
+        super().__init__(name, edges=[], color=color)
+        if len(control_grid) != 4 or any(len(row) != 4 for row in control_grid):
+            raise ValueError("BezierPatch requer grade 4x4 de pontos de controle.")
+        self.control = control_grid      # [[Point3D]*4]*4
+        self.nu = int(nu)
+        self.nv = int(nv)
+        self.type = SURFACE
+
+    # Faz as operações 3D do Object3D agirem sobre os pontos de controle
+    def _unique_points(self):
+        pts, seen = [], set()
+        for row in self.control:
+            for p in row:
+                if id(p) not in seen:
+                    seen.add(id(p))
+                    pts.append(p)
+        return pts
+
+
+class BezierSurface(Object3D):
+    def __init__(self, name, patches, color="black"):
+        super().__init__(name, edges=[], color=color)
+        self.patches = patches           # List[BezierPatch]
+        self.type = SURFACE
+
+    def _unique_points(self):
+        pts, seen = [], set()
+        for patch in self.patches:
+            for row in patch.control:
+                for p in row:
+                    if id(p) not in seen:
+                        seen.add(id(p)); pts.append(p)
+        return pts
+
+
+# --- B-spline cúbica uniforme (herdando de Object3D) ---
+class BSplineSurface(Object3D):
+    def __init__(self, name, control, color="black", nu=12, nv=12):
+        """
+        control: grade MxN de Point3D (M,N >= 4)
+        nu, nv: divisões por patch (amostragem)
+        """
+        super().__init__(name, edges=[], color=color)
+        if len(control) < 4 or len(control[0]) < 4:
+            raise ValueError("BSplineSurface requer malha de controle mínima 4x4.")
+        self.control = control
+        self.nu = int(max(1, nu))
+        self.nv = int(max(1, nv))
+        self.type = SURFACE
+
+    def _unique_points(self):
+        pts, seen = [], set()
+        for row in self.control:
+            for p in row:
+                if id(p) not in seen:
+                    seen.add(id(p)); pts.append(p)
+        return pts
+
+    # O core usa isso para desenhar (o GraphicSystem._draw_surface_object já trata)
+    def generate_mesh(self):
+        # late import pra não dar loop circular 
+        from .bspline_surface import generate_bspline_mesh
+        return generate_bspline_mesh(self.control, self.nu, self.nv)
 
 
 class DisplayFile:
