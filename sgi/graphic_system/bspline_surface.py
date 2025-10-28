@@ -174,5 +174,5 @@ def subdivide_patches(control: List[List[Point3D]]) -> List[List[List[Point3D]]]
 def generate_bspline_mesh(control: List[List[Point3D]], nu: int = 12, nv: int = 12):
     grids = []
     for patch in subdivide_patches(control):
-        grids.append(_fd_patch_grid_professor(patch, nu=nu, nv=nv))
+        grids.append(_fd_patch_grid(patch, nu=nu, nv=nv))
     return grids
