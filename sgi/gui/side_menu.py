@@ -12,59 +12,89 @@ from graphic_system.objects import (
 )
 
 
+# Ajuste de side menu, tamanho conforme conteudo
 def create_side_menu(root, main_frame, system):
-    # Menu lateral (Frame) com as opções
+    # === CONTÊINER LATERAL ===
     side_frame = tk.Frame(root)
     side_frame.pack(side=tk.LEFT, fill=tk.Y)
 
-    # Canvas para permitir o scroll
-    canvas = tk.Canvas(side_frame, width=500)
+    # === CANVAS + SCROLL ===
+    canvas = tk.Canvas(side_frame, highlightthickness=0)
     canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=5, padx=5)
 
-    # Scrollbar vertical
     scrollbar = tk.Scrollbar(side_frame, orient="vertical", command=canvas.yview)
     scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-    # Configurar o canvas para usar a scrollbar
     canvas.configure(yscrollcommand=scrollbar.set)
-    canvas.bind(
-        "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-    )
 
-    # Frame interno (onde ficam os botões e menus de verdade)
+    # Frame interno real de conteúdo
     menu_frame = tk.Frame(canvas)
-    canvas.create_window((0, 0), window=menu_frame, anchor="nw")
+    inner_id = canvas.create_window((0, 0), window=menu_frame, anchor="nw")
 
+    # ====== SCROLL REGION + LARGURA RESPONSIVA ======
+    SIDEBAR_MIN = 260    # largura mínima "agradável"
+    SIDEBAR_MAX = 560    # largura máxima para não estourar a UI
+
+    def _sync_width():
+        # largura visível do canvas (desconta a barra se estiver visível)
+        visible_w = canvas.winfo_width()
+        if scrollbar.winfo_ismapped():
+            try:
+                visible_w -= scrollbar.winfo_width()
+            except Exception:
+                pass
+        # clamp: respeita min/max e conteúdo
+        req = menu_frame.winfo_reqwidth()
+        target = max(SIDEBAR_MIN, min(SIDEBAR_MAX, max(req, visible_w)))
+        canvas.itemconfigure(inner_id, width=target)
+        # atualiza wrap de labels que precisam quebrar linha
+        for lbl in getattr(menu_frame, "_wrap_targets", []):
+            try:
+                lbl.configure(wraplength=max(100, target - 24))
+            except Exception:
+                pass
+        # scrollregion sempre certinha
+        canvas.configure(scrollregion=canvas.bbox("all"))
+
+    def _on_canvas_config(_event):
+        _sync_width()
+
+    def _on_menu_config(_event):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+        _sync_width()
+
+    canvas.bind("<Configure>", _on_canvas_config)
+    menu_frame.bind("<Configure>", _on_menu_config)
+
+    # ====== SCROLL MOUSE (Win/mac + Linux) ======
     def _on_mousewheel(event):
+        # Windows / macOS
         canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-    def _on_mousewheel_linux_up(event):
+    def _on_mousewheel_linux_up(_):
         canvas.yview_scroll(-1, "units")
 
-    def _on_mousewheel_linux_down(event):
+    def _on_mousewheel_linux_down(_):
         canvas.yview_scroll(1, "units")
 
-    menu_frame.bind(
-        "<Enter>",
-        lambda e: (
-            menu_frame.bind_all("<MouseWheel>", _on_mousewheel),
-            menu_frame.bind_all("<Button-4>", _on_mousewheel_linux_up),
-            menu_frame.bind_all("<Button-5>", _on_mousewheel_linux_down),
-        ),
-    )
+    def _bind_wheel(_):
+        menu_frame.bind_all("<MouseWheel>", _on_mousewheel)
+        menu_frame.bind_all("<Button-4>", _on_mousewheel_linux_up)
+        menu_frame.bind_all("<Button-5>", _on_mousewheel_linux_down)
 
-    menu_frame.bind(
-        "<Leave>",
-        lambda e: (
-            menu_frame.unbind_all("<MouseWheel>"),
-            menu_frame.unbind_all("<Button-4>"),
-            menu_frame.unbind_all("<Button-5>"),
-        ),
-    )
+    def _unbind_wheel(_):
+        menu_frame.unbind_all("<MouseWheel>")
+        menu_frame.unbind_all("<Button-4>")
+        menu_frame.unbind_all("<Button-5>")
 
-    # Label do menu de opções
-    tk.Label(menu_frame, text="Menu de Opções", font=("Arial", 14, "bold")).pack(pady=6)
+    menu_frame.bind("<Enter>", _bind_wheel)
+    menu_frame.bind("<Leave>", _unbind_wheel)
 
+    # ====== CONTEÚDO ======
+    # dica: tudo que for .pack(fill=tk.X) já “respira” melhor numa largura variável
+    title = tk.Label(menu_frame, text="Menu de Opções", font=("Arial", 14, "bold"))
+    title.pack(pady=6, fill=tk.X)
+
+    # seus blocos (sem mudanças estruturais)
     create_object_choice(menu_frame, system, canvas)
     create_default_color(menu_frame, system)
     list_objects_listbox(menu_frame, system)
@@ -73,14 +103,25 @@ def create_side_menu(root, main_frame, system):
     create_window3d_controls(menu_frame, system)
     create_clipping_controls(menu_frame, system)
 
-    # Atalhos úteis
+    # Ajuda – com wrap dinâmico
     help_label = tk.Label(
         menu_frame,
-        text="Uso rápido:\n- Clique para criar pontos/linhas\n- Finalizar wireframe para polígonos\n- Selecione objeto na lista para transformar",
-        wraplength=200,
+        text=(
+            "Uso rápido:\n"
+            "- Clique para criar pontos/linhas\n"
+            "- Finalizar wireframe para polígonos\n"
+            "- Selecione objeto na lista para transformar"
+        ),
         justify="left",
+        anchor="w",
     )
-    help_label.pack(padx=5, pady=10)
+    help_label.pack(padx=8, pady=10, fill=tk.X)
+
+    # registre labels que precisam de wrap “elástico”
+    menu_frame._wrap_targets = [help_label]
+
+    # força um sync inicial após a janela montar
+    root.after(50, _sync_width)
 
 
 def create_object_choice(menu_frame, system, canvas):
