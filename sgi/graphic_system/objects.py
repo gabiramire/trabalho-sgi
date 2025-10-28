@@ -296,10 +296,7 @@ class BezierSurface(Object3D):
 # --- B-spline cúbica uniforme (herdando de Object3D) ---
 class BSplineSurface(Object3D):
     def __init__(self, name, control, color="black", nu=12, nv=12):
-        """
-        control: grade MxN de Point3D (M,N >= 4)
-        nu, nv: divisões por patch (amostragem)
-        """
+        
         super().__init__(name, edges=[], color=color)
         if len(control) < 4 or len(control[0]) < 4:
             raise ValueError("BSplineSurface requer malha de controle mínima 4x4.")

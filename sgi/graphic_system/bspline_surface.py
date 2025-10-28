@@ -18,8 +18,8 @@ def _mat_mul4(A, B):
             out[i][j] = s
     return out
 
+# A * B * C (tudo 4x4)
 def _mat_mul4_chain(A, B, C):
-    """Retorna A * B * C (tudo 4x4)."""
     return _mat_mul4(_mat_mul4(A, B), C)
 
 def _transpose4(A):
@@ -31,7 +31,7 @@ def _transpose4(A):
 
 # Base cúbica B-spline e matrizes de FD (E)
 def bspline_uniform_cubic_basis() -> List[List[Number]]:
-    """Matriz base cúbica B-spline uniforme (Foley & van Dam)."""
+    # Matriz base cúbica B-spline uniforme (Foley & van Dam)
     s = 1.0 / 6.0
     return [
         [-1*s,  3*s, -3*s, 1*s],
@@ -45,15 +45,15 @@ def build_Ed(h: Number) -> List[List[Number]]:
     h3 = h*h*h
     return [
         [0.0, 0.0, 0.0, 1.0],   # f0
-        [h3,  h2,  h,   0.0],   # Δ1
-        [6*h3, 2*h2, 0.0, 0.0], # Δ2
-        [6*h3, 0.0,  0.0, 0.0], # Δ3
+        [h3,  h2,  h,   0.0],   # delta1
+        [6*h3, 2*h2, 0.0, 0.0], # delta2
+        [6*h3, 0.0,  0.0, 0.0], # delta3
     ]
 
 
 # Geometria e coeficientes C
+# Extrai Gx, Gy, Gz (4x4) a partir de uma grade 4x4 de Point3D.
 def _build_geom_matrices_4x4(ctrl4x4: List[List[Point3D]]):
-    """Extrai Gx, Gy, Gz (4x4) a partir de uma grade 4x4 de Point3D."""
     Gx = [[0.0]*4 for _ in range(4)]
     Gy = [[0.0]*4 for _ in range(4)]
     Gz = [[0.0]*4 for _ in range(4)]
@@ -66,8 +66,8 @@ def _build_geom_matrices_4x4(ctrl4x4: List[List[Point3D]]):
             Gz[i][j] = p.z
     return Gx, Gy, Gz
 
+# Coeficientes em base potência: C = M · G · Mᵀ
 def _compute_C_from_G(G: List[List[Number]], M: List[List[Number]]) -> List[List[Number]]:
-    """Coeficientes em base potência: C = M · G · Mᵀ"""
     Mt = _transpose4(M)
     return _mat_mul4_chain(M, G, Mt)
 
@@ -78,8 +78,8 @@ def _advance_rows(DD: List[List[Number]]) -> None:
         DD[1][c] += DD[2][c]
         DD[2][c] += DD[3][c]
 
+# Gera n+1 amostras 1D (f, delta1, delta2, delta3) via FD para um polinômio cúbico.
 def _fd_curve_samples(n: int, seeds: Tuple[Number, Number, Number, Number]) -> List[Number]:
-    """Gera n+1 amostras 1D (f, Δ1, Δ2, Δ3) via FD para um polinômio cúbico."""
     f, d1, d2, d3 = seeds
     out = []
     for _ in range(n+1):
@@ -115,7 +115,7 @@ def _fd_patch_grid(ctrl4x4: List[List[Point3D]], nu: int, nv: int) -> List[List[
     grid_s_then_t: List[List[Tuple[Number, Number, Number]]] = []
 
     for _is in range(nu + 1):
-        # sementes (f,Δ1,Δ2,Δ3) = 1ª linha de DD em t
+        # sementes (f,delta1,delta2,delta3) = 1ª linha de DD em t
         seeds_x = (DDx[0][0], DDx[0][1], DDx[0][2], DDx[0][3])
         seeds_y = (DDy[0][0], DDy[0][1], DDy[0][2], DDy[0][3])
         seeds_z = (DDz[0][0], DDz[0][1], DDz[0][2], DDz[0][3])
@@ -138,8 +138,8 @@ def _fd_patch_grid(ctrl4x4: List[List[Point3D]], nu: int, nv: int) -> List[List[
 
     return grid_v_then_u
 
+# Transpôe grade de tamanho (nu+1) x (nv+1) para (nv+1) x (nu+1).
 def _transpose_grid(grid_st: List[List[Tuple[Number, Number, Number]]]) -> List[List[Tuple[Number, Number, Number]]]:
-    """Transpõe grade de tamanho (nu+1) x (nv+1) para (nv+1) x (nu+1)."""
     if not grid_st:
         return []
     rows = len(grid_st)
