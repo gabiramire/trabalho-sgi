@@ -5,7 +5,6 @@ from tkinter import colorchooser, filedialog, messagebox, simpledialog
 from .bezier_curve import bezier_curve, bezier_multisegment
 from .bezier_surface import generate_surface_grid
 from .bspline_fd import evaluate_bspline_fd
-from .bspline_surface import generate_bspline_mesh
 from .clipping import clip_point, cohen_sutherland, liang_barsky, sutherland_hodgman
 from .obj_descriptor import DescritorOBJ
 from .objects import (
@@ -79,7 +78,6 @@ class Viewport:
         self.px1 = max(w - 20, self.px0 + 1)
         self.py1 = max(h - 20, self.py0 + 1)
 
-        # >>> CASAR ASPECTO DA WINDOW COM A VIEWPORT INTERNA <<<
         vx = max(self.px1 - self.px0, 1)
         vy = max(self.py1 - self.py0, 1)
         target_aspect = vx / vy
@@ -576,9 +574,7 @@ class GraphicSystem:
         self.refresh_listbox()
         self.redraw()
 
-    # =====================
     # Operações sobre objeto selecionado
-    # =====================
     def get_selected_object(self):
         if self.objects_listbox is None:
             return None
@@ -874,7 +870,7 @@ class GraphicSystem:
         d.transient(parent.winfo_toplevel())
         d.grab_set()
 
-        # ====== Referencial ======
+        # Referencial
         tk.Label(d, text="Referencial:").grid(
             row=0, column=0, sticky="w", padx=6, pady=(8, 4)
         )
@@ -889,7 +885,7 @@ class GraphicSystem:
                 row=0, column=i, sticky="w", padx=4, pady=(8, 4)
             )
 
-        # ====== Eixo ======
+        # Eixo
         tk.Label(d, text="Eixo:").grid(row=1, column=0, sticky="w", padx=6, pady=4)
         axis_var = tk.StringVar(value="z")
         axis_opts = [("X", "x"), ("Y", "y"), ("Z", "z"), ("Arbitrário", "arbitrary")]
@@ -898,7 +894,7 @@ class GraphicSystem:
                 row=1, column=i, sticky="w", padx=4, pady=4
             )
 
-        # ====== Ângulo ======
+        # Ângulo
         tk.Label(d, text="Ângulo (graus):").grid(
             row=2, column=0, sticky="w", padx=6, pady=4
         )
@@ -906,19 +902,19 @@ class GraphicSystem:
         entry_angle.insert(0, "15")
         entry_angle.grid(row=2, column=1, sticky="w")
 
-        # ====== Centro (só se referencial = arbitrário) ======
+        # Centro (só se referencial = arbitrário)
         center_row = 3
         lbl_center = tk.Label(d, text="Centro (x,y,z):")
         entry_center = tk.Entry(d, width=24)
         entry_center.insert(0, "0,0,0")
 
-        # ====== Direção (só se eixo = arbitrário) ======
+        # Direção (só se eixo = arbitrário)
         dir_row = 4
         lbl_dir = tk.Label(d, text="Direção (dx,dy,dz):")
         entry_dir = tk.Entry(d, width=24)
         entry_dir.insert(0, "0,0,1")
 
-        # ====== Botões ======
+        # Botões
         btns = tk.Frame(d)
         btns.grid(row=5, column=0, columnspan=4, pady=8)
         result = {
@@ -930,7 +926,7 @@ class GraphicSystem:
             "direction": None,
         }
 
-        # ---- utilidades de layout dinâmico ----
+        # utilidades de layout dinâmico
         def show_center(show: bool):
             if show:
                 lbl_center.grid(row=center_row, column=0, sticky="w", padx=6, pady=4)
@@ -1106,25 +1102,30 @@ class GraphicSystem:
 
     # Desenha superfície bicúbica como uma malha
     def _draw_surface_object(self, surface_obj):
-
         # Caso seja B-spline (tem generate_mesh)
         if hasattr(surface_obj, "generate_mesh"):
             grids = surface_obj.generate_mesh()
             for grid3d in grids:
-                grid2d = [[self._project3d_to2d_world(p) for p in row] for row in grid3d]
+                grid2d = [
+                    [self._project3d_to2d_world(p) for p in row] for row in grid3d
+                ]
                 # desenhe linhas u e v como já faz
-                for j in range(len(grid2d[0])):                   # v fixo, percorre u
-                    for i in range(len(grid2d)-1):
-                        x1,y1 = grid2d[i][j]
-                        x2,y2 = grid2d[i+1][j]
-                        self._draw_clipped_world_segment(x1,y1,x2,y2,surface_obj.color)
-                for i in range(len(grid2d)):                      # u fixo, percorre v
-                    for j in range(len(grid2d[0])-1):
-                        x1,y1 = grid2d[i][j]
-                        x2,y2 = grid2d[i][j+1]
-                        self._draw_clipped_world_segment(x1,y1,x2,y2,surface_obj.color)
+                for j in range(len(grid2d[0])):  # v fixo, percorre u
+                    for i in range(len(grid2d) - 1):
+                        x1, y1 = grid2d[i][j]
+                        x2, y2 = grid2d[i + 1][j]
+                        self._draw_clipped_world_segment(
+                            x1, y1, x2, y2, surface_obj.color
+                        )
+                for i in range(len(grid2d)):  # u fixo, percorre v
+                    for j in range(len(grid2d[0]) - 1):
+                        x1, y1 = grid2d[i][j]
+                        x2, y2 = grid2d[i][j + 1]
+                        self._draw_clipped_world_segment(
+                            x1, y1, x2, y2, surface_obj.color
+                        )
             return
-        
+
         # Caso seja Bézier (tem patches)
         patches = []
         if hasattr(surface_obj, "patches") and surface_obj.patches:
@@ -1155,7 +1156,7 @@ class GraphicSystem:
                     x2, y2 = grid2d[i][j + 1]
                     self._draw_clipped_world_segment(x1, y1, x2, y2, surface_obj.color)
 
-    # ---- Helpers para clipping correto com janela possivelmente rotacionada ----
+    # Helpers para clipping correto com janela possivelmente rotacionada
     def _rotate_point(self, x, y, ang_deg, cx, cy):
         import math
 

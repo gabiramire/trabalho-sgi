@@ -56,7 +56,7 @@ class Window3D:
         v = self._cross(n, u)
         self.u, self.v, self.n = u, v, n
 
-    # ---------- window navigation operations ----------
+    # Operações de navegação da window/câmera
     def rotate_camera(
         self, yaw_deg: float = 0.0, pitch_deg: float = 0.0, roll_deg: float = 0.0
     ):
@@ -109,7 +109,7 @@ class Window3D:
     def change_d(self, delta: float):
         self.d = max(10.0, self.d + delta)
 
-    # converte ponto do mundo para camera
+    # Converte ponto do mundo para camera
     def world_to_camera(self, p: Tuple[float, float, float]):
         x, y, z = p
         dx, dy, dz = x - self.vrp[0], y - self.vrp[1], z - self.vrp[2]
@@ -118,17 +118,17 @@ class Window3D:
         zc = dx * self.n[0] + dy * self.n[1] + dz * self.n[2]
         return xc, yc, zc
 
-    # projeta um Point3D do mundo para 2D (no plano da câmera)
+    # Projeta um Point3D do mundo para 2D (no plano da câmera)
     def project_point(self, p: Tuple[float, float, float]):
         xc, yc, zc = self.world_to_camera(p)
         if self.projection_mode == "parallel":
             return (xc, yc)
-        denom = (self.d + zc)
+        denom = self.d + zc
         if abs(denom) < 1e-9:
             denom = 1e-9  # evita divisão por zero
         return (self.d * xc / denom, self.d * yc / denom)
 
-    # conveniência: projeta uma lista de Point3D/tuplas para 2D
+    # Projeta uma lista de Point3D/tuplas para 2D
     def project_points(self, points3d):
         out = []
         for P in points3d:

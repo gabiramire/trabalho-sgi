@@ -16,11 +16,11 @@ from graphic_system.objects import (
 def create_side_menu(root, main_frame, system):
     sidebar_width = 250  # largura "agradável" para não estourar a UI
 
-    # === CONTÊINER LATERAL ===
+    # Container lateral
     side_frame = tk.Frame(root)
     side_frame.pack(side=tk.LEFT, fill=tk.Y)
 
-    # === CANVAS + SCROLL ===
+    # Canvas e scrollbar
     canvas = tk.Canvas(side_frame, width=sidebar_width)
     canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=5, padx=5)
 
@@ -63,7 +63,7 @@ def create_side_menu(root, main_frame, system):
     canvas.bind("<Configure>", _on_canvas_config)
     menu_frame.bind("<Configure>", _on_menu_config)
 
-    # ====== SCROLL MOUSE (Win/mac + Linux) ======
+    # Rolagem com mouse wheel
     def _on_mousewheel(event):
         # Windows / macOS
         canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -87,12 +87,10 @@ def create_side_menu(root, main_frame, system):
     menu_frame.bind("<Enter>", _bind_wheel)
     menu_frame.bind("<Leave>", _unbind_wheel)
 
-    # ====== CONTEÚDO ======
-    # dica: tudo que for .pack(fill=tk.X) já “respira” melhor numa largura variável
+    # Opções do menu
     title = tk.Label(menu_frame, text="Menu de Opções", font=("Arial", 14, "bold"))
     title.pack(pady=6, fill=tk.X)
 
-    # seus blocos (sem mudanças estruturais)
     create_object_choice(menu_frame, system, canvas)
     create_default_color(menu_frame, system)
     list_objects_listbox(menu_frame, system)
@@ -101,7 +99,6 @@ def create_side_menu(root, main_frame, system):
     create_window3d_controls(menu_frame, system)
     create_clipping_controls(menu_frame, system)
 
-    # Ajuda – com wrap dinâmico
     help_label = tk.Label(
         menu_frame,
         text=(
@@ -329,7 +326,7 @@ def start_wireframe3d(name, num_edges, menu_frame, system):
         text=f"Defina as {num_edges} arestas abaixo (cada vértice no formato x,y,z):",
     ).pack(padx=8, pady=(8, 4), anchor="w")
 
-    # === Área rolável ===
+    # Área com scroll para entradas
     frame_entries = tk.Frame(dialog)
     frame_entries.pack(fill="both", expand=True, padx=8, pady=4)
 
@@ -342,13 +339,13 @@ def start_wireframe3d(name, num_edges, menu_frame, system):
     scrollable_frame = tk.Frame(canvas, bg="white")
     win_id = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
 
-    # alinha largura do frame interno com o canvas
+    # Alinha largura do frame interno com o canvas
     canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win_id, width=e.width))
     scrollable_frame.bind(
         "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
     )
 
-    # ===== Cabeçalho (AGORA NO MESMO GRID DO CONTEÚDO) =====
+    # Cabeçalho
     tk.Label(scrollable_frame, text="#", width=4, anchor="center", bg="white").grid(
         row=0, column=0, padx=2, pady=(0, 6)
     )
@@ -359,11 +356,11 @@ def start_wireframe3d(name, num_edges, menu_frame, system):
         row=0, column=2, padx=2, pady=(0, 6), sticky="w"
     )
 
-    # pesos das colunas p/ expandirem corretamente
+    #
     scrollable_frame.grid_columnconfigure(1, weight=1)
     scrollable_frame.grid_columnconfigure(2, weight=1)
 
-    # ===== Entradas: 1 linha por aresta, 2 colunas (v1, v2) =====
+    # Entradas: 1 linha por aresta, 2 colunas (v1, v2)
     edge_entries = []
     for i in range(num_edges):
         row = i + 1
@@ -385,7 +382,7 @@ def start_wireframe3d(name, num_edges, menu_frame, system):
     if edge_entries:
         edge_entries[0][0].focus_set()
 
-    # ===== Botões =====
+    # Botões
     btns = tk.Frame(dialog)
     btns.pack(pady=8)
 
@@ -423,7 +420,7 @@ def create_bezier_surface3d_dialog(menu_frame, system):
     dialog = tk.Toplevel(menu_frame)
     dialog.title("Superfície Bézier 3D (4x4 por patch)")
 
-    # --- Nome
+    # Nome
     tk.Label(dialog, text="Nome do objeto:").grid(
         row=0, column=0, sticky="w", padx=6, pady=6
     )
@@ -431,7 +428,7 @@ def create_bezier_surface3d_dialog(menu_frame, system):
     entry_name.insert(0, "BezierSurface")
     entry_name.grid(row=0, column=1, sticky="we", padx=6, pady=6)
 
-    # --- nu, nv
+    # nu, nv
     tk.Label(dialog, text="Divisões nu × nv:").grid(
         row=1, column=0, sticky="w", padx=6, pady=6
     )
@@ -445,7 +442,7 @@ def create_bezier_surface3d_dialog(menu_frame, system):
     entry_nu.pack(side=tk.LEFT)
     entry_nv.pack(side=tk.LEFT)
 
-    # --- Cor
+    # Cor
     color_var = tk.StringVar(value=system.default_color)
 
     def choose_color():
@@ -461,7 +458,7 @@ def create_bezier_surface3d_dialog(menu_frame, system):
         side=tk.LEFT, padx=6
     )
 
-    # --- Texto dos patches
+    # Texto dos patches
     tk.Label(
         dialog,
         text="Pontos de controle (4x4 por patch; linhas separadas por ';').\n"
@@ -542,7 +539,6 @@ def create_bspline_surface3d_dialog(menu_frame, system):
     dialog = tk.Toplevel(menu_frame)
     dialog.title("Superfície B-Spline 3D por Forward Differences (malha 4×4…20×20)")
 
-    # --- Nome
     tk.Label(dialog, text="Nome do objeto:").grid(
         row=0, column=0, sticky="w", padx=6, pady=6
     )
@@ -550,7 +546,7 @@ def create_bspline_surface3d_dialog(menu_frame, system):
     entry_name.insert(0, "BSplineSurface")
     entry_name.grid(row=0, column=1, sticky="we", padx=6, pady=6)
 
-    # --- nu, nv (divisões por PATCH, não pela malha inteira)
+    # nu, nv (divisões por PATCH, não pela malha inteira)
     tk.Label(dialog, text="Divisões nu × nv por patch:").grid(
         row=1, column=0, sticky="w", padx=6, pady=6
     )
@@ -564,7 +560,7 @@ def create_bspline_surface3d_dialog(menu_frame, system):
     entry_nu.pack(side=tk.LEFT)
     entry_nv.pack(side=tk.LEFT)
 
-    # --- Cor
+    # Cor
     color_var = tk.StringVar(value=system.default_color)
 
     def choose_color():
@@ -580,7 +576,7 @@ def create_bspline_surface3d_dialog(menu_frame, system):
         side=tk.LEFT, padx=6
     )
 
-    # --- Instruções
+    # Instruções
     tk.Label(
         dialog,
         text=(
@@ -592,7 +588,7 @@ def create_bspline_surface3d_dialog(menu_frame, system):
         ),
     ).grid(row=3, column=0, columnspan=2, sticky="w", padx=6, pady=(6, 2))
 
-    # --- Caixa de texto
+    # Caixa de texto
     txt = tk.Text(dialog, width=64, height=14)
     txt.grid(row=4, column=0, columnspan=2, sticky="nsew", padx=6, pady=6)
 
@@ -608,7 +604,7 @@ def create_bspline_surface3d_dialog(menu_frame, system):
     dialog.grid_rowconfigure(4, weight=1)
     dialog.grid_columnconfigure(1, weight=1)
 
-    # --- Parser m×n (4..20)
+    # Parser m×n (4..20)
     POINT_RE = re.compile(
         r"\(\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*,\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*,\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*\)"
     )
